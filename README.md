@@ -72,4 +72,7 @@ make install
 
 Consider the following releated repositories.
 
+- [Neovim](https://github.com/neovim/neovim/releases/)
+- [TPM](https://github.com/tmux-plugins/tpm)
+- [vim-plug](https://github.com/junegunn/vim-plug)
 - [zPrezto](https://github.com/en0/prezto/tree/master)
