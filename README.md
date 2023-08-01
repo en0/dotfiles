@@ -76,3 +76,4 @@ Consider the following releated repositories.
 - [TPM](https://github.com/tmux-plugins/tpm)
 - [vim-plug](https://github.com/junegunn/vim-plug)
 - [zPrezto](https://github.com/en0/prezto/tree/master)
+- [NVM](https://github.com/nvm-sh/nvm)

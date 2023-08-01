@@ -7,12 +7,12 @@ i3-wm.gaps.focus_follows_mouse: True
 i3-wm.bar.position: top
 
 ! Fonts
-gnome.terminal.font: Cousine Nerd Font 12
+gnome.terminal.font: RobotoMono Nerd Font Mono 12
 gtk.document_font_name:	Sans 12
-gtk.font_name: Cousine Nerd Font 12
-gtk.monospace_font_name: Cousine Nerd Font 12
-i3-wm.bar.font:	Cousine Nerd Font 12
-i3xrocks.value.font: Cousine Nerd Font 12
+gtk.font_name: RobotoMono Nerd Font Mono 12
+gtk.monospace_font_name: RobotoMono Nerd Font Mono 12
+i3-wm.bar.font:	RobotoMono Nerd Font 12
+i3xrocks.value.font: RobotoMono Nerd Font Mono 12
 
 ! Theme
 regolith.look.path: /usr/share/regolith-look/nord
