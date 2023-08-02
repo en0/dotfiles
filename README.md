@@ -39,10 +39,6 @@ started.
 The **config** directory contains various configuration files that should be placed
 in the `~/.config` directory.
 
-- **config/nvim**: Configuration files for Neovim.
-- **config/regolith2**: Configuration files for Regolith Linux.
-- **config/tmux**: Configuration files for Tmux.
-
 ### Bin Directory
 
 The **bin** directory contains custom scripts and executables that will be linked to
@@ -52,6 +48,52 @@ the `~/.bin` directory.
 
 The **env** directory contains environment-related files that will be linked to
 the `~/.env.d` directory.
+
+## Exclusions
+
+You can use an `exclude` file to prevent specific files or folders from being
+installed on a particular system. Exclude files provide a way to fine-tune the
+installation process based on your needs.
+
+### Config Exclusion
+
+If you want to exclude certain configuration files or folders from being
+installed in the `~/.config` directory, you can create an `exclude` file in the
+`~/.config` directory. List the names of the files or folders you wish to
+exclude, one per line.
+
+**~/.config/exclude:**
+
+```plaintext
+config/some-config-file
+config/excluded-folder
+```
+
+### Bin Exclusion
+
+For excluding custom scripts or executables from being installed in the `~/.bin`
+directory, create an exclude file in the `~/.bin` directory and list the items you
+want to exclude, one per line.
+
+**~/.bin/exclude:**
+
+```plaintext
+bin/some-script
+bin/excluded-executable
+```
+
+### Environment Exclusion
+
+To exclude specific environment files from being installed in the `~/.env.d`
+directory, create an exclude file in the `~/.env.d` directory and list the
+environment files you wish to exclude, one per line.
+
+**~/.env.d/exclude:**
+
+```plaintext
+env/some-environment-file.env
+env/excluded-env-file.env
+```
 
 ## Updating Dotfiles
 
