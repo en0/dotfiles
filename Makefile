@@ -34,7 +34,7 @@ install: config bin env
 	@echo "Dotfiles installation completed!"
 	@echo ""
 	@echo "Don't forget to add the following to your .bashrc or .zshrc:"
-	@echo "[ -d \"$$HOME/.env.d\" ] && for f in $$HOME/.env.d/*; do source $$f; done"
+	@echo "[ -d \"$$HOME/.env.d\" ] && for f in $$HOME/.env.d/*.env; do source $$f; done"
 
 config: $(addprefix $(HOME)/.config/,$(CONFIG_OBJ))
 $(HOME)/.config/%: config/% $(HOME)/.config

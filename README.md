@@ -26,7 +26,7 @@ repository to their respective locations in your home directory.
 3. Put the following line in your `.bashrc` or `.zshrc` file.
 
 ```bash
-[ -d "$HOME/.env.d" ] && for f in $HOME/.env.d/*; do source $f; done
+[ -d "$HOME/.env.d" ] && for f in $HOME/.env.d/*.env; do source $f; done
 ```
 
 This line will activate the files in `$HOME/.env.d` each time your shell is
