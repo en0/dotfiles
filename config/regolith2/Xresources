@@ -7,15 +7,34 @@ i3-wm.gaps.focus_follows_mouse: True
 i3-wm.bar.position: top
 
 ! Fonts
-gnome.terminal.font: RobotoMono Nerd Font Mono 12
-gtk.document_font_name:	Sans 12
-gtk.font_name: RobotoMono Nerd Font Mono 12
-gtk.monospace_font_name: RobotoMono Nerd Font Mono 12
-i3-wm.bar.font:	RobotoMono Nerd Font 12
-i3xrocks.value.font: RobotoMono Nerd Font Mono 12
+gnome.terminal.font: DroidSansM Nerd Font Mono 12
+gtk.document_font_name:	DroidSansM Nerd Font Mono 12
+gtk.font_name: DroidSansM Nerd Font Mono 12
+gtk.monospace_font_name: DroidSansM Nerd Font Mono 12
+i3-wm.bar.font:	DroidSans MN Nerd Font 12
+i3xrocks.value.font: DroidSansM Nerd Font Mono 12
 
 ! Theme
 regolith.look.path: /usr/share/regolith-look/nord
+i3-wm.workspace.01.name: 1:<span> </span><span foreground='#5E81AC'>󰎤</span><span> </span>
+i3-wm.workspace.02.name: 2:<span> </span><span foreground='#88C0D0'>󰎧</span><span> </span>
+i3-wm.workspace.03.name: 3:<span> </span><span foreground='#A3BE8C'>󰎪</span><span> </span>
+i3-wm.workspace.04.name: 4:<span> </span><span foreground='#EBCB8B'>󰎭</span><span> </span>
+i3-wm.workspace.05.name: 5:<span> </span><span foreground='#D08770'>󰎱</span><span> </span>
+i3-wm.workspace.06.name: 6:<span> </span><span foreground='#EA4335'>󰊯</span><span> </span>
+i3-wm.workspace.07.name: 7:<span> </span><span foreground='#ECB22E'>󰒱</span><span> </span>
+i3-wm.workspace.08.name: 8:<span> </span><span foreground='#7FBA00'>󰊻</span><span> </span>
+i3-wm.workspace.09.name: 9:<span> </span><span foreground='#00A4EF'>󰴢</span><span> </span>
+i3-wm.workspace.10.name: 10:<span> </span><span foreground='#5E81AC'>󰽽</span><span> </span>
+i3-wm.workspace.11.name: 11:<span> </span><span foreground='#88C0D0'>11</span><span> </span>
+i3-wm.workspace.12.name: 12:<span> </span><span foreground='#A3BE8C'>12</span><span> </span>
+i3-wm.workspace.13.name: 13:<span> </span><span foreground='#EBCB8B'>13</span><span> </span>
+i3-wm.workspace.14.name: 14:<span> </span><span foreground='#D08770'>14</span><span> </span>
+i3-wm.workspace.15.name: 15:<span> </span><span foreground='#BF616A'>15</span><span> </span>
+i3-wm.workspace.16.name: 16:<span> </span><span foreground='#5E81AC'>16</span><span> </span>
+i3-wm.workspace.17.name: 17:<span> </span><span foreground='#B48EAD'>17</span><span> </span>
+i3-wm.workspace.18.name: 18:<span> </span><span foreground='#7B8394'>18</span><span> </span>
+i3-wm.workspace.19.name: 19:<span> </span><span foreground='#5E81AC'>19</span><span> </span>
 
-! Programs
-i3-wm.programs.1: diodon
+! Unbind some keys
+i3-wm.binding.look_selector: none

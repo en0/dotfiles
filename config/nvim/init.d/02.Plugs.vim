@@ -43,4 +43,7 @@ call plug#begin()
     " https://github.com/christoomey/vim-tmux-navigator
     Plug 'christoomey/vim-tmux-navigator'
 
+    " https://github.com/folke/todo-comments.nvim
+    Plug 'folke/todo-comments.nvim'
+
 call plug#end()

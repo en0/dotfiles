@@ -1,0 +1,2 @@
+bindsym $alt+l exec --no-startup-id "/home/ian/.bin/malstr --gui"
+bindsym $alt+s exec --no-startup-id /home/ian/.bin/screenshot

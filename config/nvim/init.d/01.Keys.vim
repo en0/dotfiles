@@ -21,7 +21,7 @@ nnoremap <Leader>f :CocCommand fzf-preview.DirectoryFiles<CR>
 nnoremap <Leader>b :CocCommand fzf-preview.Buffers<CR>
 nnoremap <Leader>F :call FzfGrep()<CR>
 nnoremap <Leader>G :CocCommand fzf-preview.GitStatus<CR>
-
+nnoremap <Leader>t :CocCommand fzf-preview.TodoComments<CR>
 
 "" Coc Integration
 " GoTo code navigation (Coc).
