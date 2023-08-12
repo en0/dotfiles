@@ -1,32 +1,37 @@
 DOTFILES_DIR := $(shell pwd)
 
-# Discover all files/folders to link in each directory: config, env, bin.
-# Look for an exclude file in the target folder and filter out the files/folders
-# from the object list. Else, install them all.
+# Target directories
+CONFIG_TARGET_DIR := $(HOME)/.config
+BIN_TARGET_DIR := $(HOME)/.bin
+ENV_TARGET_DIR := $(HOME)/.env.d
 
-CONFIGS := $(wildcard $(DOTFILES_DIR)/config/*)
-CONFIG_OBJ := $(notdir $(CONFIGS))
-CONFIG_EXCLUDE_FILE := $(HOME)/.config/exclude
-ifeq ($(wildcard $(CONFIG_EXCLUDE_FILE)), $(CONFIG_EXCLUDE_FILE))
-	CONFIG_EXCLUDE_OBJ := $(shell cat $(CONFIG_EXCLUDE_FILE))
-	CONFIG_OBJ := $(filter-out $(CONFIG_EXCLUDE_OBJ), $(CONFIG_OBJ))
-endif
+# Discover all leaf files in config, bin, and env directories
+CONFIG_LEAF_FILES := $(shell find $(DOTFILES_DIR)/config -type f)
+BIN_LEAF_FILES := $(shell find $(DOTFILES_DIR)/bin -type f)
+ENV_LEAF_FILES := $(shell find $(DOTFILES_DIR)/env -type f)
 
-BINS := $(wildcard $(DOTFILES_DIR)/bin/*)
-BIN_OBJ := $(notdir $(BINS))
-BIN_EXCLUDE_FILE := $(HOME)/.bin/exclude
-ifeq ($(wildcard $(BIN_EXCLUDE_FILE)), $(BIN_EXCLUDE_FILE))
-	BIN_EXCLUDE_OBJ := $(shell cat $(BIN_EXCLUDE_FILE))
-	BIN_OBJ := $(filter-out $(BIN_EXCLUDE_OBJ), $(BIN_OBJ))
-endif
+# Read exclude files
+CONFIG_EXCLUDE_FILE := $(CONFIG_TARGET_DIR)/exclude
+BIN_EXCLUDE_FILE := $(BIN_TARGET_DIR)/exclude
+ENV_EXCLUDE_FILE := $(ENV_TARGET_DIR)/exclude
+CONFIG_EXCLUDES := $(wildcard $(CONFIG_EXCLUDE_FILE))
+BIN_EXCLUDES := $(wildcard $(BIN_EXCLUDE_FILE))
+ENV_EXCLUDES := $(wildcard $(ENV_EXCLUDE_FILE))
 
-ENVS := $(wildcard $(DOTFILES_DIR)/env/*)
-ENV_OBJ := $(notdir $(ENVS))
-ENV_EXCLUDE_FILE := $(HOME)/.env.d/exclude
-ifeq ($(wildcard $(ENV_EXCLUDE_FILE)), $(ENV_EXCLUDE_FILE))
-	ENV_EXCLUDE_OBJ := $(shell cat $(ENV_EXCLUDE_FILE))
-	ENV_OBJ := $(filter-out $(ENV_EXCLUDE_OBJ), $(ENV_OBJ))
-endif
+# Filter out excluded files
+CONFIG_FILTERED := $(filter-out $(CONFIG_EXCLUDES), $(CONFIG_LEAF_FILES))
+BIN_FILTERED := $(filter-out $(BIN_EXCLUDES), $(BIN_LEAF_FILES))
+ENV_FILTERED := $(filter-out $(ENV_EXCLUDES), $(ENV_LEAF_FILES))
+
+# Each folder type does the same thing
+define create_link
+	relative_path=$$(echo $(1) | sed 's|$(DOTFILES_DIR)/$(2)||'); \
+	target_path=$(3)$$relative_path; \
+	target_dir=$$(dirname $$target_path); \
+	echo "Installing $${target_path}..."; \
+	mkdir -p $$target_dir; \
+	ln -sf $(1) $$target_path;
+endef
 
 .PHONY: install config bin env
 
@@ -34,28 +39,19 @@ install: config bin env
 	@echo "Dotfiles installation completed!"
 	@echo ""
 	@echo "Don't forget to add the following to your .bashrc or .zshrc:"
-	@echo "[ -d \"$$HOME/.env.d\" ] && for f in $$HOME/.env.d/*.env; do source $$f; done"
+	@echo "[ -d \"$$HOME/.env.d\" ] && for f in $$HOME/.env.d/*; do source $$f; done"
 
-config: $(addprefix $(HOME)/.config/,$(CONFIG_OBJ))
-$(HOME)/.config/%: config/% $(HOME)/.config
-	@echo "Installing $<..."
-	@ln -sf $(abspath $<) $@
-$(HOME)/.config:
-	@echo "Creating dir: $@..."
-	@mkdir $@
+config: $(CONFIG_FILTERED)
+	@for file in $^; do \
+		$(call create_link,$$file,config,$(CONFIG_TARGET_DIR)) \
+	done
 
-bin: $(addprefix $(HOME)/.bin/,$(BIN_OBJ))
-$(HOME)/.bin/%: bin/% $(HOME)/.bin
-	@echo "Installing $<..."
-	@ln -sf $(abspath $<) $@
-$(HOME)/.bin:
-	@echo "Creating dir: $@..."
-	@mkdir $@
+bin: $(BIN_FILTERED)
+	@for file in $^; do \
+		$(call create_link,$$file,bin,$(BIN_TARGET_DIR)) \
+	done
 
-env: $(addprefix $(HOME)/.env.d/,$(ENV_OBJ))
-$(HOME)/.env.d/%: env/% $(HOME)/.env.d
-	@echo "Installing $<..."
-	@ln -sf $(abspath $<) $@
-$(HOME)/.env.d:
-	@echo "Creating dir: $@..."
-	@mkdir $@
+env: $(ENV_FILTERED)
+	@for file in $^; do \
+		$(call create_link,$$file,env,$(ENV_TARGET_DIR)) \
+	done
