@@ -51,22 +51,23 @@ the `~/.env.d` directory.
 
 ## Exclusions
 
+**Exclusions are currently broken.**
+
 You can use an `exclude` file to prevent specific files or folders from being
 installed on a particular system. Exclude files provide a way to fine-tune the
 installation process based on your needs.
 
 ### Config Exclusion
 
-If you want to exclude certain configuration files or folders from being
-installed in the `~/.config` directory, you can create an `exclude` file in the
-`~/.config` directory. List the names of the files or folders you wish to
-exclude, one per line.
+If you want to exclude certain configuration files from being installed in the
+`~/.config` directory, you can create an `exclude` file in the `~/.config`
+directory. List the names of the files or folders you wish to exclude, one per
+line.
 
 **~/.config/exclude:**
 
 ```plaintext
-config/some-config-file
-config/excluded-folder
+config/path/to/some/config.file
 ```
 
 ### Bin Exclusion

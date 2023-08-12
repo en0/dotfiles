@@ -12,8 +12,8 @@ gnome.terminal.font: DroidSansM Nerd Font Mono 12
 gtk.document_font_name:	DroidSansM Nerd Font Mono 12
 gtk.font_name: DroidSansM Nerd Font Mono 12
 gtk.monospace_font_name: DroidSansM Nerd Font Mono 12
-i3-wm.bar.font:	DroidSans MN Nerd Font 24
-i3xrocks.value.font: DroidSansM Nerd Font Mono 24
+i3-wm.bar.font:	DroidSans MN Nerd Font 12
+i3xrocks.value.font: DroidSansM Nerd Font Mono 12
 
 ! Theme
 regolith.look.path: /usr/share/regolith-look/nord
