@@ -57,17 +57,20 @@ You can use an `exclude` file to prevent specific files or folders from being
 installed on a particular system. Exclude files provide a way to fine-tune the
 installation process based on your needs.
 
+Note: The examples given below assume your user name is `user` and you have
+cloned the **dotfiles** repository at `~/.dotfiles`.
+
 ### Config Exclusion
 
 If you want to exclude certain configuration files from being installed in the
 `~/.config` directory, you can create an `exclude` file in the `~/.config`
-directory. List the names of the files or folders you wish to exclude, one per
+directory. List the full name of the files you wish to exclude, one per
 line.
 
 **~/.config/exclude:**
 
 ```plaintext
-config/path/to/some/config.file
+/home/user/.dotfiles/config/regolith2/i3/config.d/50_diodon-config
 ```
 
 ### Bin Exclusion
@@ -79,8 +82,9 @@ want to exclude, one per line.
 **~/.bin/exclude:**
 
 ```plaintext
-bin/some-script
-bin/excluded-executable
+/home/user/.dotfiles/bin/excuse
+/home/user/.dotfiles/bin/git-list
+/home/user/.dotfiles/bin/todo-list
 ```
 
 ### Environment Exclusion
@@ -92,8 +96,7 @@ environment files you wish to exclude, one per line.
 **~/.env.d/exclude:**
 
 ```plaintext
-env/some-environment-file.env
-env/excluded-env-file.env
+/home/user/.dotfiles/env/50.workspace-lite.env
 ```
 
 ## Updating Dotfiles

@@ -13,6 +13,7 @@ workspace "$ws8" output $monitor_left $default_monitor
 workspace "$ws9" output $monitor_left $default_monitor
 workspace "$ws10" output $monitor_left $default_monitor
 
+assign [class="discord"] "$ws10"
 assign [class="Slack"] "$ws7"
 assign [window_role="browser"] "$ws6"
 assign [window_role="browser-window"] "$ws6"
