@@ -92,3 +92,20 @@ map <Leader>sn :lua print("Current Session: " .. MiniSessions.get_latest())<CR>
 
 " Playing around
 map <Leader>x :py say_hello()<CR>
+
+" Scratch-Window
+function! s:ScratchGenerator()
+  echom "Creating scratchy..."
+  exe "new" . "__Scratchy__"
+  echom "Scratchy created!"
+endfunction
+
+function! s:ScratchMarkBuffer()
+  setlocal buftype=nofile
+  setlocal bufhidden=hide
+  setlocal noswapfile
+endfunction
+
+autocmd BufNewFile __Scratchy__ call s:ScratchMarkBuffer()
+command! Scratchy call s:ScratchGenerator()
+map <Leader>q :Scratchy<CR>
