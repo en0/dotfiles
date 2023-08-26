@@ -1,0 +1,27 @@
+###############################################################################
+# Launchers
+###############################################################################
+
+## Launch // Terminal // <> Enter ##
+bindsym $mod+Return exec --no-startup-id $i3-wm.program.terminal
+
+## Launch // Browser // <><Shift> Enter ##
+bindsym $mod+Shift+Return exec --no-startup-id gtk-launch $(xdg-settings get default-web-browser)
+
+## Launch // Malstr // <> s ##
+bindsym $mod+s exec --no-startup-id /home/ian/.bin/malstr --gui
+
+## Launch // Screenshot // <> c ##
+bindsym $mod+c exec --no-startup-id /home/ian/.bin/screenshot
+
+## Launch // Notification Viewer // <> n ##
+bindsym $mod+n exec --no-startup-id ilia -p notifications
+
+## Launch // Application // <> p ##
+bindsym $mod+p exec --no-startup-id ilia -p apps -t $ilia.stylesheet
+
+## Launch // Command // <> d ##
+bindsym $mod+d exec --no-startup-id ilia -p terminal -t $ilia.stylesheet
+
+## Launch // Keybinding Viewer // <><Shift> ? ##
+bindsym $mod+Shift+question exec --no-startup-id ilia -p keybindings -a -t $ilia.stylesheet

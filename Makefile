@@ -1,7 +1,7 @@
 DOTFILES_DIR := $(shell pwd)
 
 # The target dir
-TARGET_ROOT := $(HOME)/testing
+TARGET_ROOT := $(HOME)
 
 # Discover all files in config
 CONFIG_TARGET_DIR := $(TARGET_ROOT)/.config

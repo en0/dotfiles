@@ -1,0 +1,10 @@
+###############################################################################
+# Startup Programs
+###############################################################################
+
+exec --no-startup-id /usr/bin/nm-applet
+exec --no-startup-id /usr/bin/regolith-ftue
+exec --no-startup-id /usr/bin/rofication-daemon
+exec --no-startup-id /usr/bin/unclutter -b
+exec --no-startup-id /usr/bin/diodon
+exec_always --no-startup-id /usr/share/regolith-compositor/init

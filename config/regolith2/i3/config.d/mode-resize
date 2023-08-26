@@ -1,0 +1,25 @@
+###############################################################################
+# Resize Mode
+###############################################################################
+
+set $resize.small 4
+set $resize.large 8
+
+mode "Resize Mode" {
+
+        ## Resize // Resize Window // k j h l ##
+        bindsym h resize shrink width $resize.small px or $resize.small ppt
+        bindsym k resize grow height $resize.small px or $resize.small ppt
+        bindsym j resize shrink height $resize.small px or $resize.small ppt
+        bindsym l resize grow width $resize.small px or $resize.small ppt
+        bindsym Shift+h resize shrink width $resize.large px or $resize.large ppt
+        bindsym Shift+k resize grow height $resize.large px or $resize.large ppt
+        bindsym Shift+j resize shrink height $resize.large px or $resize.large ppt
+        bindsym Shift+l resize grow width $resize.large px or $resize.large ppt
+        bindsym Return mode "default"
+        bindsym Escape mode "default"
+        bindsym $mod+r mode "default"
+}
+
+## Resize // Enter Resize Mode // <> r ##
+bindsym $mod+r mode "Resize Mode"

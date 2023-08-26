@@ -1,0 +1,24 @@
+###############################################################################
+# Mark Mode
+###############################################################################
+
+mode "Mark Mode" {
+
+        ## Mark // Mark Window // 1..0
+        bindsym 1 mark "m1"; mode "default"
+        bindsym 2 mark "m2"; mode "default"
+        bindsym 3 mark "m3"; mode "default"
+        bindsym 4 mark "m4"; mode "default"
+        bindsym 5 mark "m5"; mode "default"
+        bindsym 6 mark "m6"; mode "default"
+        bindsym 7 mark "m7"; mode "default"
+        bindsym 8 mark "m8"; mode "default"
+        bindsym 9 mark "m9"; mode "default"
+        bindsym 0 mark "m0"; mode "default"
+        bindsym Return mode "default"
+        bindsym Escape mode "default"
+        bindsym $mod+r mode "default"
+}
+
+## Mark // Enter Mark Mode // <> m ##
+bindsym $mod+m mode "Mark Mode"

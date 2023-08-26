@@ -1,3 +1,0 @@
-[ipaddr]
-command=ip addr show dev enp1s0 | grep 'inet ' | cut -f6 -d' '
-interval=30
