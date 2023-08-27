@@ -13,4 +13,4 @@ i3-wm.bar.font:	DroidSansM Nerd Font 12
 i3xrocks.value.font: DroidSansM Nerd Font Mono 12
 
 ! Programs
-i3-wm.program.lock: i3lock -c 333333
+i3-wm.program.lock: i3lock-fancy
