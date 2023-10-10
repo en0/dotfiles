@@ -15,7 +15,7 @@ bindsym $mod+s exec --no-startup-id /home/ian/.bin/malstr --gui
 bindsym $mod+c exec --no-startup-id /home/ian/.bin/screenshot
 
 ## Launch // Notification Viewer // <> n ##
-bindsym $mod+n exec --no-startup-id ilia -p notifications
+#bindsym $mod+n exec --no-startup-id ilia -p notifications
 
 ## Launch // Application // <> p ##
 bindsym $mod+p exec --no-startup-id ilia -p apps -t $ilia.stylesheet

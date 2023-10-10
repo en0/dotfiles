@@ -18,7 +18,7 @@ else
   set signcolumn=yes
 endif
 
-let g:coc_global_extensions = ['coc-json', 'coc-jedi', 'coc-fzf-preview', 'coc-vimlsp', 'coc-snippets']
+let g:coc_global_extensions = ['coc-json', 'coc-jedi', 'coc-fzf-preview', 'coc-vimlsp', 'coc-snippets', 'coc-java']
 
 let g:coc_user_config = {}
 let g:coc_user_config['suggest.noselect'] = v:true
