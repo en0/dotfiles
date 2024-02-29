@@ -1,0 +1,62 @@
+general {
+    output_format = "i3bar"
+    colors = true
+    interval = 5
+    color_good = "#FBB829"
+    color_degraded = "#FED06E"
+    color_bad = "#EF2F27"
+}
+
+order += "volume master"
+order += "ethernet enp0s31f6"
+order += "disk /"
+order += "memory"
+order += "load"
+order += "cpu_temperature 0"
+order += "tztime local"
+
+ethernet enp0s31f6 {
+        format_up = "%ip"
+        format_down = "Network Down"
+}
+
+battery 0 {
+        format = "%status %percentage %remaining %emptytime"
+        format_down = "No battery"
+        status_chr = "⚡ CHR"
+        status_bat = "🔋 BAT"
+        status_unk = "? UNK"
+        status_full = "☻ FULL"
+        path = "/sys/class/power_supply/BAT%d/uevent"
+        low_threshold = 10
+}
+
+tztime local {
+        format = "%Y-%m-%d %H:%M"
+        hide_if_equals_localtime = false
+}
+
+load {
+        format = "Load: %5min"
+}
+
+cpu_temperature 0 {
+        format = "Temp: %degrees °C"
+        path = "/sys/devices/platform/coretemp.0//hwmon/hwmon3/temp1_input"
+}
+
+memory {
+        format = "Mem: %percentage_used"
+        threshold_degraded = "10%"
+}
+
+disk "/" {
+        format = "Disk: %avail"
+}
+
+volume master {
+    format = "%volume"
+    device = "default"
+    mixer = "master"
+    mixer_idx = "0"
+}

@@ -42,4 +42,4 @@ bindsym $mod+Tab workspace back_and_forth
 bindsym $mod+u [urgent=latest] focus
 
 ## Navigate // Window by Name // <><Shift> p ##
-bindsym $mod+Shift+p exec --no-startup-id ilia -p windows -t $ilia.stylesheet
+#bindsym $mod+Shift+p exec --no-startup-id ilia -p windows -t $ilia.stylesheet

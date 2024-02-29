@@ -8,11 +8,8 @@ bindsym $mod+q [con_id="__focused__"] kill
 ## Session // Terminate App // <><Shift> q ##
 bindsym $mod+Shift+q [con_id="__focused__"] exec --no-startup-id kill -9 $(xdotool getwindowfocus getwindowpid)
 
-## Session // Reload i3 Config // <><Shift> c ##
-bindsym $mod+Shift+c reload
-
-## Session // Refresh Session // <><Shift> r ##
-bindsym $mod+Shift+r exec --no-startup-id /usr/bin/regolith-look refresh
+## Session // Reload i3 Config // <><Shift> r ##
+bindsym $mod+Shift+r reload
 
 ## Session // Restart i3 // <><Ctrl> r ##
 bindsym $mod+Ctrl+r restart
@@ -30,4 +27,4 @@ bindsym $mod+Shift+d exec $i3-wm.program.shutdown
 bindsym $mod+Escape exec $i3-wm.program.lock
 
 ## Session // Sleep // <><Shift> s ##
-bindsym $mod+Shift+s exec systemctl suspend
+bindsym $mod+Shift+s exec $i3-wm.program.suspend

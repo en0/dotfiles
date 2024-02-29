@@ -1,0 +1,66 @@
+[font]
+
+size = 12
+builtin_box_drawing = true
+
+[font.normal]
+family = "DejaVuSansM Nerd Font Mono"
+#style = "Book"
+
+[font.bold]
+family = "DejaVuSansM Nerd Font Mono"
+style = "Bold"
+
+[font.italic]
+family = "DejaVuSansM Nerd Font Mono"
+style = "Oblique"
+
+[font.bold_italic]
+family = "DejaVuSansM Nerd Font Mono"
+style = "Bold Oblique"
+
+[font.offset]
+x = 0
+y = 0
+
+[window.padding]
+x = 6
+y = 3
+
+# Nightfox Alacritty Colors
+# Style: carbonfox
+# Upstream: https://github.com/edeneast/nightfox.nvim/raw/main/extra/carbonfox/nightfox_alacritty.yml
+
+[colors]
+indexed_colors = [
+ {index = 16, color = "#3ddbd9"},
+ {index = 17, color = "#ff7eb6"}
+]
+
+[colors.normal]
+black = "#282828"
+red = "#ee5396"
+green = "#25be6a"
+yellow = "#08bdba"
+blue = "#78a9ff"
+magenta = "#be95ff"
+cyan = "#33b1ff"
+white = "#dfdfe0"
+
+[colors.primary]
+background = "#161616"
+foreground = "#f2f4f8"
+
+[colors.bright]
+black = "#484848"
+red = "#f16da6"
+green = "#46c880"
+yellow = "#2dc7c4"
+blue = "#8cb6ff"
+magenta = "#c8a5ff"
+cyan = "#52bdff"
+white = "#e4e4e5"
+
+#[colors.cursor]
+#text = "CellBackground"
+#cursor = "CellForeground"

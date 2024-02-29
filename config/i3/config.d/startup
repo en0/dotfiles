@@ -1,0 +1,7 @@
+###############################################################################
+# Startup Programs
+###############################################################################
+
+#exec --no-startup-id /usr/bin/diodon
+exec dunst -config ~/.config/dunst/dunstrc'
+exec_always --no-startup-id "sh -c \"cat ~/.fehbg | sh\""

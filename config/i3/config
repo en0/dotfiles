@@ -1,0 +1,110 @@
+###############################################################################
+# Colors
+###############################################################################
+
+set_from_resource $focused.color.border i3-wm.client.focused.color.border "#FED06E"
+set_from_resource $focused.color.background i3-wm.client.focused.color.background "#3A3A3A"
+set_from_resource $focused.color.text i3-wm.client.focused.color.text "#FBB829"
+set_from_resource $focused.color.indicator i3-wm.client.focused.color.indicator "#E02C6D"
+set_from_resource $focused.color.child_border i3-wm.client.focused.color.child_border "#FBB829"
+
+set_from_resource $focused_inactive.color.border i3-wm.client.focused_inactive.color.border "#4E4E4E"
+set_from_resource $focused_inactive.color.background i3-wm.client.focused_inactive.color.background "#3A3A3A"
+set_from_resource $focused_inactive.color.text i3-wm.client.focused_inactive.color.text "#918175"
+set_from_resource $focused_inactive.color.indicator i3-wm.client.focused_inactive.color.indicator "#3A3A3A"
+set_from_resource $focused_inactive.color.child_border i3-wm.client.focused_inactive.color.child_border "#4E4E4E"
+
+set_from_resource $unfocused.color.border i3-wm.client.unfocused.color.border "#262626"
+set_from_resource $unfocused.color.background i3-wm.client.unfocused.color.background "#262626"
+set_from_resource $unfocused.color.text i3-wm.client.unfocused.color.text "#918175"
+set_from_resource $unfocused.color.indicator i3-wm.client.unfocused.color.indicator "#262626"
+set_from_resource $unfocused.color.child_border i3-wm.client.unfocused.color.child_border "#262626"
+
+set_from_resource $urgent.color.border i3-wm.client.urgent.color.border "#EF2F27"
+set_from_resource $urgent.color.background i3-wm.client.urgent.color.background "#262626"
+set_from_resource $urgent.color.text i3-wm.client.urgent.color.text "#EF2F27"
+set_from_resource $urgent.color.indicator i3-wm.client.urgent.color.indicator "#EF2F27"
+set_from_resource $urgent.color.child_border i3-wm.client.urgent.color.child_border "#EF2F27"
+
+set_from_resource $placeholder.color.border i3-wm.client.placeholder.color.border "#262626"
+set_from_resource $placeholder.color.background i3-wm.client.placeholder.color.background "#262626"
+set_from_resource $placeholder.color.text i3-wm.client.placeholder.color.text "#918175"
+set_from_resource $placeholder.color.indicator i3-wm.client.placeholder.color.indicator "#262626"
+set_from_resource $placeholder.color.child_border i3-wm.client.placeholder.color.child_border "#262626"
+
+set_from_resource $background.color.background i3-wm.client.background.color.background #1C1B19"
+
+set_from_resource $i3-wm.bar.background.color i3-wm.bar.background.color "#262626"
+set_from_resource $i3-wm.bar.statusline.color i3-wm.bar.statusline.color "#918175"
+set_from_resource $i3-wm.bar.separator.color i3-wm.bar.separator.color "#918175"
+
+set_from_resource $i3-wm.bar.workspace.focused.border.color i3-wm.bar.workspace.focused.border.color "#3A3A3A"
+set_from_resource $i3-wm.bar.workspace.focused.background.color i3-wm.bar.workspace.focused.background.color "#3A3A3A"
+set_from_resource $i3-wm.bar.workspace.focused.text.color i3-wm.bar.workspace.focused.text.color "#FBB829"
+
+set_from_resource $i3-wm.bar.workspace.active.border.color i3-wm.bar.workspace.active.border.color "#3A3A3A"
+set_from_resource $i3-wm.bar.workspace.active.background.color i3-wm.bar.workspace.active.background.color "#3A3A3A"
+set_from_resource $i3-wm.bar.workspace.active.text.color i3-wm.bar.workspace.active.text.color "#918175"
+
+set_from_resource $i3-wm.bar.workspace.inactive.border.color i3-wm.bar.workspace.inactive.border.color "#262626"
+set_from_resource $i3-wm.bar.workspace.inactive.background.color i3-wm.bar.workspace.inactive.background.color "#262626"
+set_from_resource $i3-wm.bar.workspace.inactive.text.color i3-wm.bar.workspace.inactive.text.color "#918175"
+
+set_from_resource $i3-wm.bar.workspace.urgent.border.color i3-wm.bar.workspace.urgent.border.color "#EF2F27"
+set_from_resource $i3-wm.bar.workspace.urgent.background.color i3-wm.bar.workspace.urgent.background.color "#EF2F27"
+set_from_resource $i3-wm.bar.workspace.urgent.text.color i3-wm.bar.workspace.urgent.text.color "#262626"
+
+###############################################################################
+# Fonts
+###############################################################################
+
+set_from_resource $i3-wm.bar.font i3-wm.bar.font DejaVuSansM Nerd Font Mono 13
+set_from_resource $i3-wm.font gtk.font_name  DejaVuSansM Nerd Font Mono 13
+
+###############################################################################
+# Meta Key Mappings
+###############################################################################
+
+set_from_resource $mod  i3-wm.mod Mod1
+
+###############################################################################
+# Workspace Names
+###############################################################################
+
+set $ws1   1:1
+set $ws2   2:2
+set $ws3   3:3
+set $ws4   4:4
+set $ws5   5:5
+set $ws6   6:6
+set $ws7   7:7
+set $ws8   8:8
+set $ws9   9:9
+set $ws10 10:10
+
+###############################################################################
+# Programs
+###############################################################################
+
+set_from_resource $i3-wm.program.lock i3-wm.program.lock i3lock -t -i $HOME/Pictures/wallpaper/ncc-1701.png
+set_from_resource $i3-wm.program.logout i3-wm.program.logout i3-msg exit
+set_from_resource $i3-wm.program.reboot i3-wm.program.reboot systemctl reboot
+set_from_resource $i3-wm.program.shutdown i3-wm.program.shutdown systemctl shutdown
+set_from_resource $i3-wm.program.suspend i3-wm.program.suspend systemctl suspend
+set_from_resource $i3-wm.program.terminal i3-wm.program.terminal /usr/local/bin/alacritty
+set_from_resource $i3-wm.program.app-launcher i3-wm.program.app-launcher /usr/bin/i3-dmenu-desktop
+set_from_resource $i3-wm.program.cmd-launcher i3-wm.program.cmd-launcher /usr/bin/dmenu_run
+
+###############################################################################
+# Monitors
+###############################################################################
+
+set_from_resource $i3-wm.output.default i3-wm.output.default DP-2
+set_from_resource $i3-wm.output.primary i3-wm.output.primary HDMI-2
+set_from_resource $i3-wm.output.secondary i3-wm.output.secondary DP-2
+
+###############################################################################
+# i3 Config Partials
+###############################################################################
+
+include $HOME/.config/i3/config.d/*

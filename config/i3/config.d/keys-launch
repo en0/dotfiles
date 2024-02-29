@@ -18,10 +18,10 @@ bindsym $mod+c exec --no-startup-id /home/ian/.bin/screenshot
 #bindsym $mod+n exec --no-startup-id ilia -p notifications
 
 ## Launch // Application // <> p ##
-bindsym $mod+p exec --no-startup-id ilia -p apps -t $ilia.stylesheet
+bindsym $mod+p exec --no-startup-id $i3-wm.program.app-launcher
 
 ## Launch // Command // <> d ##
-bindsym $mod+d exec --no-startup-id ilia -p terminal -t $ilia.stylesheet
+bindsym $mod+d exec --no-startup-id $i3-wm.program.cmd-launcher
 
 ## Launch // Keybinding Viewer // <><Shift> ? ##
-bindsym $mod+Shift+question exec --no-startup-id ilia -p keybindings -a -t $ilia.stylesheet
+#bindsym $mod+Shift+question exec --no-startup-id ilia -p keybindings -a -t $ilia.stylesheet

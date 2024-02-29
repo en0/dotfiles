@@ -2,7 +2,7 @@
 
 if [ "--gui" == "$1" ]
 then
-    MENU="ilia -p textlist -l MalStr -i"
+    MENU="dmenu -p MalStr"
 else
     MENU="fzf"
 fi
