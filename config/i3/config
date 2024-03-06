@@ -92,16 +92,17 @@ set_from_resource $i3-wm.program.reboot i3-wm.program.reboot systemctl reboot
 set_from_resource $i3-wm.program.shutdown i3-wm.program.shutdown systemctl shutdown
 set_from_resource $i3-wm.program.suspend i3-wm.program.suspend systemctl suspend
 set_from_resource $i3-wm.program.terminal i3-wm.program.terminal /usr/local/bin/alacritty
-set_from_resource $i3-wm.program.app-launcher i3-wm.program.app-launcher /usr/bin/i3-dmenu-desktop
-set_from_resource $i3-wm.program.cmd-launcher i3-wm.program.cmd-launcher /usr/bin/dmenu_run
+# Note, you need the line-hight patch from suckless.org for this command to work. Or, remove the -h parameter from the dmenu commands.
+set_from_resource $i3-wm.program.app-launcher i3-wm.program.app-launcher /usr/bin/i3-dmenu-desktop --dmenu='dmenu -fn "DejaVuSansM Nerd Font Mono" -p RUN -nb "#262626" -nf "#918175" -sb "#3A3A3A" -sf "#FBB829" -h 28'
+set_from_resource $i3-wm.program.cmd-launcher i3-wm.program.cmd-launcher /usr/local/bin/dmenu_run -fn "DejaVuSansM Nerd Font Mono" -p RUN -nb "#262626" -nf "#918175" -sb "#3A3A3A" -sf "#FBB829" -h 28
 
 ###############################################################################
 # Monitors
 ###############################################################################
 
-set_from_resource $i3-wm.output.default i3-wm.output.default DP-2
-set_from_resource $i3-wm.output.primary i3-wm.output.primary HDMI-2
-set_from_resource $i3-wm.output.secondary i3-wm.output.secondary DP-2
+set_from_resource $i3-wm.output.default i3-wm.output.default HDMI-3
+set_from_resource $i3-wm.output.primary i3-wm.output.primary HDMI-3
+set_from_resource $i3-wm.output.secondary i3-wm.output.secondary DP-4
 
 ###############################################################################
 # i3 Config Partials
