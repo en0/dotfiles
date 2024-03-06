@@ -3,5 +3,5 @@
 ###############################################################################
 
 #exec --no-startup-id /usr/bin/diodon
-exec dunst -config ~/.config/dunst/dunstrc'
+exec /usr/local/bin/dunst -config ~/.config/dunst/dunstrc'
 exec_always --no-startup-id "sh -c \"cat ~/.fehbg | sh\""
