@@ -5,3 +5,4 @@
 #exec --no-startup-id /usr/bin/diodon
 #exec --no-startup-id /usr/local/bin/dunst -config ~/.config/dunst/dunstrc'
 exec_always --no-startup-id "sh -c \"cat ~/.fehbg | sh\""
+exec --no-startup-id "xrandr --output HDMI-2 --mode 3840x2160 --left-of DP-4 --output DP-4 --mode 3840x2160 --primary"
