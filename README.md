@@ -17,7 +17,7 @@ cd ~/.dotfiles
 2. Run the installation script:
 
 ```bash
-make install
+./install.py
 ```
 
 The installation script will create symbolic links from the dotfiles in this
@@ -42,62 +42,12 @@ in the `~/.config` directory.
 ### Bin Directory
 
 The **bin** directory contains custom scripts and executables that will be linked to
-the `~/.bin` directory.
+the `~/.local/bin` directory.
 
 ### Environment Directory
 
 The **env** directory contains environment-related files that will be linked to
 the `~/.env.d` directory.
-
-## Exclusions
-
-**Exclusions are currently broken.**
-
-You can use an `exclude` file to prevent specific files or folders from being
-installed on a particular system. Exclude files provide a way to fine-tune the
-installation process based on your needs.
-
-Note: The examples given below assume your user name is `user` and you have
-cloned the **dotfiles** repository at `~/.dotfiles`.
-
-### Config Exclusion
-
-If you want to exclude certain configuration files from being installed in the
-`~/.config` directory, you can create an `exclude` file in the `~/.config`
-directory. List the full name of the files you wish to exclude, one per
-line.
-
-**~/.config/exclude:**
-
-```plaintext
-/home/user/.dotfiles/config/regolith2/i3/config.d/50_diodon-config
-```
-
-### Bin Exclusion
-
-For excluding custom scripts or executables from being installed in the `~/.bin`
-directory, create an exclude file in the `~/.bin` directory and list the items you
-want to exclude, one per line.
-
-**~/.bin/exclude:**
-
-```plaintext
-/home/user/.dotfiles/bin/excuse
-/home/user/.dotfiles/bin/git-list
-/home/user/.dotfiles/bin/todo-list
-```
-
-### Environment Exclusion
-
-To exclude specific environment files from being installed in the `~/.env.d`
-directory, create an exclude file in the `~/.env.d` directory and list the
-environment files you wish to exclude, one per line.
-
-**~/.env.d/exclude:**
-
-```plaintext
-/home/user/.dotfiles/env/50.workspace-lite.env
-```
 
 ## Updating Dotfiles
 
@@ -111,7 +61,7 @@ To update the dotfiles in this repository:
 ```bash
 cd ~/.dotfiles
 git pull origin main
-make install
+./install.py
 ```
 
 # Related
@@ -121,5 +71,5 @@ Consider the following releated repositories.
 - [Neovim](https://github.com/neovim/neovim/releases/)
 - [TPM](https://github.com/tmux-plugins/tpm)
 - [vim-plug](https://github.com/junegunn/vim-plug)
-- [zPrezto](https://github.com/en0/prezto/tree/master)
+- [Powerlevel10k](https://github.com/romkatv/powerlevel10k)
 - [NVM](https://github.com/nvm-sh/nvm)

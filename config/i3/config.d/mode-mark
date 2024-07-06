@@ -2,7 +2,12 @@
 # Mark Mode
 ###############################################################################
 
-mode "Mark Mode" {
+
+set $mode_mark Mark: 1..0
+
+bindsym $mod+m mode "$mode_mark"
+
+mode "$mode_mark" {
 
         ## Mark // Mark Window // 1..0
         bindsym 1 mark "m1"; mode "default"
@@ -17,8 +22,4 @@ mode "Mark Mode" {
         bindsym 0 mark "m0"; mode "default"
         bindsym Return mode "default"
         bindsym Escape mode "default"
-        bindsym $mod+r mode "default"
 }
-
-## Mark // Enter Mark Mode // <> m ##
-bindsym $mod+m mode "Mark Mode"

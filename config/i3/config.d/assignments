@@ -1,0 +1,20 @@
+###############################################################################
+# Window/Workspace Assigments
+###############################################################################
+
+# Workspaces
+workspace "$ws1" output $display.secondary $display.default
+workspace "$ws2" output $display.secondary $display.default
+workspace "$ws3" output $display.secondary $display.default
+workspace "$ws4" output $display.secondary $display.default
+workspace "$ws5" output $display.secondary $display.default
+workspace "$ws6" output $display.primary $display.default
+workspace "$ws7" output $display.primary $display.default
+workspace "$ws8" output $display.primary $display.default
+workspace "$ws9" output $display.primary $display.default
+workspace "$ws10" output $display.primary $display.default
+
+# Windows
+assign [class="discord"] "$ws10"
+assign [window_role="browser"] "$ws6"
+assign [window_role="browser-window"] "$ws6"

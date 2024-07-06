@@ -2,19 +2,14 @@
 # Window and Workspace Navigation
 ###############################################################################
 
-## Navigate // Relative Parent // <> a ##/
 bindsym $mod+a focus parent
-
-## Navigate // Relative Child // <><Shift> a ##/
 bindsym $mod+Shift+a focus child
 
-## Navigate // Relative Window // <> k j h l ##
 bindsym $mod+h focus left
 bindsym $mod+j focus down
 bindsym $mod+k focus up
 bindsym $mod+l focus right
 
-## Navigate // Workspaces 1-10 // <> 0..9 ##
 bindsym $mod+1 workspace number $ws1
 bindsym $mod+2 workspace number $ws2
 bindsym $mod+3 workspace number $ws3
@@ -26,20 +21,8 @@ bindsym $mod+8 workspace number $ws8
 bindsym $mod+9 workspace number $ws9
 bindsym $mod+0 workspace number $ws10
 
-## Navigate // Next Workspace on Output // <><Ctrl> l ##
 bindsym $mod+Ctrl+l workspace next_on_output
-
-## Navigate // Previous Workspace on Output // <><Ctrl> h ##
 bindsym $mod+Ctrl+h workspace prev_on_output
-
-## Navigate // Scratchpad // <> - ##
 bindsym $mod+minus scratchpad show
-
-## Navigate // Workspace back & forth // <> Tab ##
 bindsym $mod+Tab workspace back_and_forth
-
-## Navigate // Focus Urgent // <> u ##
 bindsym $mod+u [urgent=latest] focus
-
-## Navigate // Window by Name // <><Shift> p ##
-#bindsym $mod+Shift+p exec --no-startup-id ilia -p windows -t $ilia.stylesheet

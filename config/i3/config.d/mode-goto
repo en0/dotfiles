@@ -2,7 +2,11 @@
 # Goto Mode
 ###############################################################################
 
-mode "Goto Mode" {
+set $mode_goto Goto: 1..0
+
+bindsym $mod+g mode "$mode_goto"
+
+mode "$mode_goto" {
 
         ## Goto // Goto Window // 1..0
         bindsym 1 [con_mark="m1"] focus; mode "default"
@@ -17,8 +21,5 @@ mode "Goto Mode" {
         bindsym 0 [con_mark="m0"] focus; mode "default"
         bindsym Return mode "default"
         bindsym Escape mode "default"
-        bindsym $mod+r mode "default"
 }
 
-## Goto // Enter Goto Mode // <> g ##
-bindsym $mod+g mode "Goto Mode"

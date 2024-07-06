@@ -1,31 +1,18 @@
 ###############################################################################
-# Styles
+# i3 Appearance
 ###############################################################################
 
-client.placeholder      #262626                            #262626                            #918175                            #262626                            #262626
-client.background       #1C1B19
+font pango:$font
 
-# Window Border color
-# class                 border                             background                         text                               indicator                          child_border
-client.focused          $focused.color.border              $focused.color.background          $focused.color.text                $focused.color.indicator           $focused.color.child_border
-client.focused_inactive $focused_inactive.color.border     $focused_inactive.color.background $focused_inactive.color.text       $focused_inactive.color.indicator  $focused_inactive.color.child_border
-client.unfocused        $unfocused.color.border            $unfocused.color.background        $unfocused.color.text              $unfocused.color.indicator         $unfocused.color.child_border
-client.urgent           $urgent.color.border               $urgent.color.background           $urgent.color.text                 $urgent.color.indicator            $urgent.color.child_border
+default_border pixel 1
+default_floating_border normal
 
-client.placeholder      $placeholder.color.border          $placeholder.color.background      $placeholder.color.text            $placeholder.color.indicator       $placeholder.color.child_border
-client.background       $background.color.background
+# Theme colors
+# class                   border  backgr. text    indic.   child_border
+  client.focused          #556064 #556064 #80FFF9 #FDF6E3
+  client.focused_inactive #2F3D44 #2F3D44 #1ABC9C #454948
+  client.unfocused        #2F3D44 #2F3D44 #1ABC9C #454948
+  client.urgent           #CB4B16 #FDF6E3 #1ABC9C #268BD2
+  client.placeholder      #000000 #0c0c0c #ffffff #000000
 
-font pango:$i3-wm.font
-
-floating_maximum_size -1 x -1
-for_window [class="floating_window"] floating enable
-
-default_floating_border pixel 3
-default_border pixel 3
-
-#gaps inner 5
-#gaps outer 0
-for_window [all] border pixel 3
-
-#smart_gaps on
-#smart_borders on
+  client.background       #2B2C2B

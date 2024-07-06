@@ -2,26 +2,22 @@
 # Launchers
 ###############################################################################
 
-## Launch // Terminal // <> Enter ##
-bindsym $mod+Return exec --no-startup-id $i3-wm.program.terminal
+# Closing Applications
+bindsym $mod+q [con_id="__focused__"] kill
+bindsym $mod+Shift+q [con_id="__focused__"] exec --no-startup-id kill -9 $(xdotool getwindowfocus getwindowpid)
 
-## Launch // Browser // <><Shift> Enter ##
-bindsym $mod+Shift+Return exec --no-startup-id gtk-launch $(xdg-settings get default-web-browser)
+bindsym $mod+Return exec $program.terminal
+bindsym $mod+Shift+Return exec $program.web-browser
 
-## Launch // Malstr // <> s ##
+bindsym $mod+o exec --no-startup-id blurlock
+bindsym $mod+p exec --no-startup-id dmenu_recency
+bindsym $mod+d exec --no-startup-id dmenu_run
+bindsym $mod+z exec --no-startup-id morc_menu
+
 bindsym $mod+s exec --no-startup-id /home/ian/.bin/malstr --gui
-
-## Launch // Screenshot // <> c ##
 bindsym $mod+c exec --no-startup-id /home/ian/.bin/screenshot
 
-## Launch // Notification Viewer // <> n ##
-#bindsym $mod+n exec --no-startup-id ilia -p notifications
+bindsym $mod+Shift+f exec pcmanfm
+bindsym $mod+Shift+d --release exec "killall dunst; exec notify-send 'restart dunst'"
 
-## Launch // Application // <> p ##
-bindsym $mod+p exec --no-startup-id $i3-wm.program.app-launcher
-
-## Launch // Command // <> d ##
-bindsym $mod+d exec --no-startup-id $i3-wm.program.cmd-launcher
-
-## Launch // Keybinding Viewer // <><Shift> ? ##
-#bindsym $mod+Shift+question exec --no-startup-id ilia -p keybindings -a -t $ilia.stylesheet
+bindsym $mod+Ctrl+m exec $program.terminal -e 'alsamixer'

@@ -1,5 +1,5 @@
 " Do i still need this in neovim 0.5+?
-let g:python3_host_prog='$HOME/.config/nvim/venv/bin/python'
+let g:python3_host_prog='$HOME/.local/share/pyenv/bin/python'
 
 "syntax on
 set nu
