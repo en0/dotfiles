@@ -1,0 +1,9 @@
+###############################################################################
+# Audio Control keys
+###############################################################################
+
+bindsym Shift+XF86AudioMute exec $HOME/.local/bin/volctl info
+bindsym XF86AudioMute exec $HOME/.local/bin/volctl toggle-mute
+bindsym XF86AudioLowerVolume exec $HOME/.local/bin/volctl decrease
+bindsym XF86AudioRaiseVolume exec $HOME/.local/bin/volctl increase
+bindsym XF86AudioMicMute exec pactl set-source-mute @DEFAULT_SOURCE@ toggle

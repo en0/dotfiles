@@ -1,0 +1,119 @@
+#/bin/bash
+
+VDELTA=5
+
+if ! command -v pactl &> /dev/null
+then
+    echo You need to install pactl.
+    exit
+fi
+
+function usage() {
+    echo "Usage: $0 <ACTION>"
+    echo ""
+    echo "ACTIONS"
+    echo "    increase     Incrase the volume"
+    echo "    decrease     Decrease the volume"
+    echo "    mute         Mute the volume"
+    echo "    unmute       Unmute the volume"
+    echo "    toggle-mute  Toggle mute the volume"
+    echo "    info         Get the current volume"
+    exit 1
+}
+
+if [[ -z "$1" ]]
+then
+    echo "Missing required argument." 1>&2
+    echo "" 1>&2
+    usage 1>&2
+fi
+
+if [[ "$1" == "help" || "$1" == "-h" || "$1" == "--help" ]]
+then
+    usage
+fi
+
+ACTION=$1
+
+if [[ ! "$ACTION" =~ ^(increase|decrease|mute|unmute|toggle-mute|info)$ ]]; then
+    echo "Unknown action $ACTION." 1>&2
+    echo "" 1>&2
+    usage
+fi
+
+case $ACTION in
+
+    increase)
+        cmd="pactl set-sink-volume @DEFAULT_SINK@ +$VDELTA%"
+        FRIENDLY_ACTION="Increased"
+        ;;
+
+    decrease)
+        cmd="pactl set-sink-volume @DEFAULT_SINK@ -$VDELTA%"
+        FRIENDLY_ACTION="Decreased"
+        ;;
+
+    mute)
+        cmd="pactl set-sink-mute @DEFAULT_SINK@ 1"
+        FRIENDLY_ACTION="Muted"
+        ;;
+
+    unmute)
+        cmd="pactl set-sink-mute @DEFAULT_SINK@ 0"
+        FRIENDLY_ACTION="Unmuted"
+        ;;
+
+    toggle-mute)
+        cmd="pactl set-sink-mute @DEFAULT_SINK@ toggle"
+        FRIENDLY_ACTION="TOGGLE"
+        ;;
+
+    info)
+        cmd="false"
+        FRIENDLY_ACTION="Query"
+        ;;
+esac
+
+$cmd 2>&1 1>/dev/null
+VOLUME=$(pactl get-sink-volume @DEFAULT_SINK@ | awk '{print $5}' | tr -d '%')
+MUTED=$(pactl get-sink-mute @DEFAULT_SINK@ | awk '{print $2}')
+
+ICON="audio-volume-medium-symbolic"
+
+if [ $VOLUME -ge 66 ]
+then
+    ICON="audio-volume-high-symbolic"
+fi
+
+if [ $VOLUME -le 33 ]
+then
+    ICON="audio-volume-low-symbolic"
+fi
+
+if [[ "$MUTED" == "yes" ]]
+then
+    ICON="audio-volume-muted-symbolic"
+fi
+
+if [[ "$FRIENDLY_ACTION" == "TOGGLE" && "$MUTED" == "yes" ]]
+then
+    FRIENDLY_ACTION="Muted"
+fi
+
+if [[ "$FRIENDLY_ACTION" == "TOGGLE" && "$MUTED" == "no" ]]
+then
+    FRIENDLY_ACTION="Unmuted"
+fi
+
+if [[ "$MUTED" == "yes" ]]
+then
+    FRIENDLY_VOLUME="$VOLUME% (muted)"
+else
+    FRIENDLY_VOLUME="$VOLUME%"
+fi
+
+which dunstify 1>/dev/null && \
+    dunstify -i "$ICON" -r 2593 -u normal -h int:value:$VOLUME "Volume Control" "$FRIENDLY_VOLUME : $FRIENDLY_ACTION"
+
+echo "Volume Control"
+echo "$FRIENDLY_VOLUME | $FRIENDLY_ACTION"
