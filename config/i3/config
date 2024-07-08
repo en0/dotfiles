@@ -6,9 +6,9 @@ set $font MesloLGS Nerd Font Mono 10
 set $program.terminal /usr/bin/alacritty
 set $program.web-browser /usr/bin/firefox
 
-set $display.default "DP-2"
-set $display.primary "DP-2"
-set $display.secondary "DP-2"
+set $display.default "eDP1"
+set $display.primary "eDP1"
+set $display.secondary "eDP1"
 
 set $ws1 1
 set $ws2 2

@@ -14,13 +14,12 @@
 
 exec --no-startup-id cat $HOME/.fehbg | sh; sleep 1; picom -b --config $HOME/.config/picom/picom.conf
 
-#exec --no-startup-id nm-applet
-#exec --no-startup-id blueman-applet
+exec --no-startup-id nm-applet
+exec --no-startup-id blueman-applet
 exec --no-startup-id conky -c ~/.config/conky/conky_grey
 #exec --no-startup-id start_conky_green
 exec --no-startup-id xautolock -time 10 -locker blurlock
 #exec --no-startup-id volumeicon
 exec --no-startup-id setxkbmap -option caps:escape
-exec --no-startup-id xrandr --output $display.default --primary
-exec_always --no-startup-id "killall polybar; polybar"
+exec_always --no-startup-id xrandr --output $display.default --primary
 exec_always --no-startup-id setxkbmap -option caps:escape

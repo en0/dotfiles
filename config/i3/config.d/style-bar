@@ -2,28 +2,28 @@
 # Bar Style
 ###############################################################################
 
-#bar {
-#	i3bar_command i3bar
-#	status_command i3status
-#	position top
-#    tray_output primary
-#
-#	bindsym button4 nop
-#	bindsym button5 nop
-#	strip_workspace_numbers yes
-#
-#    font pango:$font
-#
-#    colors {
-#        background #222D31
-#        statusline #F9FAF9
-#        separator  #454947
-#
-#        #                  border  backgr  text
-#        focused_workspace  #F9FAF9 #16a085 #292F34
-#        active_workspace   #595B5B #353836 #FDF6E3
-#        inactive_workspace #595B5B #222D31 #EEE8D5
-#        binding_mode       #16a085 #2C2C2C #F9FAF9
-#        urgent_workspace   #16a085 #FDF6E3 #E5201D
-#    }
-#}
+bar {
+	i3bar_command i3bar
+	status_command i3blocks
+	position top
+    tray_output primary
+
+	bindsym button4 nop
+	bindsym button5 nop
+	strip_workspace_numbers yes
+
+    font pango:$font
+
+    colors {
+        background #262626
+        statusline #666677
+        separator  #555577
+
+        #                  border  backgr  text
+        focused_workspace  #555577 #555577 #000000
+        active_workspace   #555555 #555555 #000000
+        inactive_workspace #262626 #262626 #666677
+        binding_mode       #555577 #262626 #555577
+        urgent_workspace   #662626 #662626 #666666
+    }
+}

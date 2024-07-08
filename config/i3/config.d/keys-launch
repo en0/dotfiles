@@ -9,15 +9,14 @@ bindsym $mod+Shift+q [con_id="__focused__"] exec --no-startup-id kill -9 $(xdoto
 bindsym $mod+Return exec $program.terminal
 bindsym $mod+Shift+Return exec $program.web-browser
 
-bindsym $mod+o exec --no-startup-id blurlock
 bindsym $mod+p exec --no-startup-id dmenu_recency
 bindsym $mod+d exec --no-startup-id dmenu_run
-bindsym $mod+z exec --no-startup-id morc_menu
 
-bindsym $mod+s exec --no-startup-id /home/ian/.bin/malstr --gui
-bindsym $mod+c exec --no-startup-id /home/ian/.bin/screenshot
+bindsym $mod+s exec --no-startup-id /home/ian/.local/bin/malstr --gui
+bindsym $mod+c exec --no-startup-id /home/ian/.local/bin/screenshot
 
-bindsym $mod+Shift+f exec pcmanfm
-bindsym $mod+Shift+d --release exec "killall dunst; exec notify-send 'restart dunst'"
+bindsym $mod+Shift+d --release exec "killall dunst; exec notify-send 'Dunst restarted'"
 
-bindsym $mod+Ctrl+m exec $program.terminal -e 'alsamixer'
+#bindsym $mod+z exec --no-startup-id morc_menu
+#bindsym $mod+Shift+f exec pcmanfm
+#bindsym $mod+Ctrl+m exec $program.terminal -e 'alsamixer'
