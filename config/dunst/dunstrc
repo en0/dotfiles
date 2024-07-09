@@ -477,10 +477,10 @@
 [play_sound_critical]
     summary = "*"
     msg_urgency = critical
-    script = /home/ian/.local/bin/play-notification-sound
+    script = /home/ian/.local/bin/play-warning-sound
 
 [play_sound_normal]
     summary = "*"
     msg_urgency = normal
-    script = /home/ian/.local/bin/play-notification-sound
+    script = /home/ian/.local/bin/play-info-sound
 # vim: ft=cfg
