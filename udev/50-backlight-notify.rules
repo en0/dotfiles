@@ -1,0 +1,8 @@
+# Note that this script assumes user name and user id
+#
+# Send notification when backlight changes.
+SUBSYSTEM=="backlight", \
+ENV{DISPLAY}=":0", \
+ENV{XAUTHORITY}="/home/ian/.Xauthority", \
+ENV{DBUS_SESSION_BUS_ADDRESS}="unix:path=/run/user/1000/bus", \
+RUN+="/usr/bin/su ian -c \"/usr/bin/notify-send  -u low -r 2593 -i computer-symbolic -h int:value:$[$attr{brightness}*100/$attr{max_brightness}] 'Brightness Control'\""

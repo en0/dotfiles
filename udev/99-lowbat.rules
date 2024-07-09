@@ -1,0 +1,15 @@
+# Note that this script assumes user name and user id
+#
+# Suspend the system when battery level drops to 5% or lower
+SUBSYSTEM=="power_supply", \
+ATTR{status}=="Discharging", \
+ATTR{capacity}=="[0-5]", RUN+="/usr/bin/systemctl hibernate"
+
+# Raise notification when battery level drops to 10% or lower
+SUBSYSTEM=="power_supply", \
+ATTR{status}=="Discharging", \
+ATTR{capacity}=="[0-10]", \
+ENV{DISPLAY}=":0", \
+ENV{XAUTHORITY}="/home/ian/.Xauthority", \
+ENV{DBUS_SESSION_BUS_ADDRESS}="unix:path=/run/user/1000/bus", \
+RUN+="/usr/bin/su ian -c \"/usr/bin/notify-send -u critical -i battery-symbolic 'Battery Low' 'Time to find electrons in motion.'\""

@@ -113,7 +113,7 @@ else
 fi
 
 which dunstify 1>/dev/null && \
-    dunstify -i "$ICON" -r 2593 -u normal -h int:value:$VOLUME "Volume Control" "$FRIENDLY_VOLUME : $FRIENDLY_ACTION"
+    dunstify -i "$ICON" -r 2593 -u low -h int:value:$VOLUME "Volume Control" "$FRIENDLY_VOLUME : $FRIENDLY_ACTION"
 
 echo "Volume Control"
 echo "$FRIENDLY_VOLUME | $FRIENDLY_ACTION"
