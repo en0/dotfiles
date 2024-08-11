@@ -2,7 +2,8 @@
 
 if [ "--gui" == "$1" ]
 then
-    MENU="dmenu -p MalStr"
+    shift
+    MENU="dmenu -p Tools: $@"
 else
     MENU="fzf"
 fi

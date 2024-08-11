@@ -2,24 +2,13 @@
 # Startup Programs
 ###############################################################################
 
-# Thins i probably don't want
-#exec --no-startup-id /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1
-#exec --no-startup-id manjaro-hello
-#exec --no-startup-id xfce4-power-manager
-#exec --no-startup-id pamac-tray
-#exec --no-startup-id clipit
-#exec_always --no-startup-id sbxkb
-#exec_always --no-startup-id ff-theme-util
-#exec_always --no-startup-id fix_xcursor
-
 exec --no-startup-id cat $HOME/.fehbg | sh; sleep 1; picom -b --config $HOME/.config/picom/picom.conf
 
 exec --no-startup-id nm-applet
 exec --no-startup-id blueman-applet
-exec --no-startup-id conky -c ~/.config/conky/conky_grey
-#exec --no-startup-id start_conky_green
 exec --no-startup-id xautolock -time 10 -locker blurlock
-#exec --no-startup-id volumeicon
-exec --no-startup-id setxkbmap -option caps:escape
+
 exec_always --no-startup-id xrandr --output $display.default --primary
-exec_always --no-startup-id setxkbmap -option caps:escape
+
+#exec --no-startup-id setxkbmap -option caps:escape
+#exec_always --no-startup-id setxkbmap -option caps:escape
