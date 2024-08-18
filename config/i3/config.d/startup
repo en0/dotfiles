@@ -7,8 +7,4 @@ exec --no-startup-id cat $HOME/.fehbg | sh; sleep 1; picom -b --config $HOME/.co
 exec --no-startup-id nm-applet
 exec --no-startup-id blueman-applet
 exec --no-startup-id xautolock -time 10 -locker blurlock
-
-exec_always --no-startup-id xrandr --output $display.default --primary
-
-#exec --no-startup-id setxkbmap -option caps:escape
-#exec_always --no-startup-id setxkbmap -option caps:escape
+#exec_always --no-startup-id autorandr -c
