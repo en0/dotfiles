@@ -4,8 +4,8 @@ import = [
 
 [window]
 padding.x = 6
-padding.y = 3
-decorations = "Buttonless"
+padding.y = 24
+decorations = "Transparent"
 opacity = 0.8
 blur = true
 dimensions.columns = 120
