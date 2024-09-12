@@ -1,6 +1,0 @@
-###############################################################################
-# Audio Control keys
-###############################################################################
-
-bindsym XF86MonBrightnessUp exec --no-startup-id brightnessctl s 1000+
-bindsym XF86MonBrightnessDown exec --no-startup-id brightnessctl s 1000-

@@ -8,7 +8,9 @@ padding.y = 3
 decorations = "Buttonless"
 opacity = 0.8
 blur = true
+dimensions.columns = 120
+dimensions.lines = 40
 
 [font]
-size = 12
+size = 15
 normal.family = "MesloLGS Nerd Font Mono"
