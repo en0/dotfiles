@@ -46,4 +46,8 @@ call plug#begin()
     " https://github.com/folke/todo-comments.nvim
     Plug 'folke/todo-comments.nvim'
 
+    " https://github.com/David-Kunz/gen.nvim
+    Plug 'David-Kunz/gen.nvim'
+
+    Plug 'antoinemadec/coc-fzf', {'branch': 'release'}
 call plug#end()
