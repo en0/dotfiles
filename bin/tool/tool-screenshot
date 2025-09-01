@@ -1,0 +1,29 @@
+#!/bin/bash
+
+### tool-screenshot ###############################################################################
+# A command-line utility for taking a screenshot and placing it in the clipboard
+# Dependencies: xclip, maim, notify-send, feh
+###################################################################################################
+
+source $(dirname $(readlink -e $0))/helpers
+
+NAME="󰹑 Screenshot"
+
+SHOTDIR=$HOME/Pictures/screenshots
+SHOT=$SHOTDIR/$(date "+%y%m%d%s").png
+mkdir -p $SHOTDIR
+
+maim -s > $SHOT
+if [ ! $? -eq 0 ]; then
+    rm -rf $SHOT
+    which maim || \
+        notify-send -u "critical" "${NAME}" "Cannot capture screenshot\nMaim not installed."
+    exit
+fi
+xclip -selection clipboard -t image/png -i $SHOT
+if [ ! $? -eq 0 ]; then
+    notify-send -u "critical" "${NAME}" "Failed to update clipboard.\nIs xclip not installed?"
+fi
+
+R=$(notify-send -A "a=show" -u "low" -i ${SHOT} "${NAME}" "Screnshot Captured\n$(basename ${SHOT})")
+[[ "$R" == "a" ]] && feh "$SHOT"

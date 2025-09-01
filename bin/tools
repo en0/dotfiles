@@ -1,0 +1,10 @@
+#!/bin/bash
+
+TOOL_DIR=$HOME/.bin/tool/
+
+source $TOOL_DIR/helpers
+
+SELECTED=$(ls $TOOL_DIR/tool-* | awk '{split($0, a, "-"); print a[2]}' | dmenu -p "󰍜 Tools:" -l 10 -i $@)
+[[ "${SELECTED}" == "" ]] && exit
+read COMMAND DETAILS <<< "$SELECTED"
+"$TOOL_DIR/tool-$COMMAND" $DETAILS $@

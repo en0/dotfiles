@@ -1,0 +1,39 @@
+#!/bin/bash
+
+### tool-hwstats ##################################################################################
+# A command-line utility to display hardware statistics
+# Dependencies: notify-send, read, amixer, df, free, uptime, hostnamectl
+###################################################################################################
+
+source $(dirname $(readlink -e $0))/helpers
+
+TOTAL_BLOCKS=27
+
+# Read memory data
+read -r mem_avail mem_total < <(free | grep "Mem:" | awk '{print $7" "$2}')
+read -r swap_avail swap_total < <(free | grep "Swap:" | awk '{print $4" "$2}')
+mem_usage=$((100 - $(ceil-div $(($mem_avail * 100)) $mem_total)))
+swap_usage=$((100 - $(ceil-div $(($swap_avail * 100)) $swap_total)))
+
+# Read in disk data
+root_usage=$(df / | tail -n1 | awk '{print $5}' | sed s/%//)
+boot_usage=$(df /boot | tail -n1 | awk '{print $5}' | sed s/%//)
+
+# Read volume data
+read -r vvol vstate < <(amixer sget Master | grep -P 'Front Left:' | awk '{print $5 $6}' | grep -Po '\w*' | xargs)
+read -r cvol mstate < <(amixer sget Capture | grep -P 'Front Left:' | awk '{print $5 $6}' | grep -Po '\w*' | xargs)
+
+[[ "${vstate}" == "on" ]] && vicon="󰕾" || vicon="󰖁"
+[[ "${mstate}" == "on" ]] && micon="󰍬" || micon="󰍭"
+
+ MEM_BAR="  Mem  $(render-bar $mem_usage $TOTAL_BLOCKS) $mem_usage%\n"
+SWAP_BAR=" 󰾴 Swap $(render-bar $swap_usage $TOTAL_BLOCKS) $swap_usage%\n"
+ROOT_BAR=" 󰋊 Root $(render-bar $root_usage $TOTAL_BLOCKS) $root_usage%\n"
+BOOT_BAR=" 󰋊 Boot $(render-bar $boot_usage $TOTAL_BLOCKS) $boot_usage%\n"
+VOL_BAR=" $vicon Vol  $(render-bar $vvol $TOTAL_BLOCKS) $vvol%\n"
+MIC_BAR=" $micon Mic  $(render-bar $cvol $TOTAL_BLOCKS) $cvol%\n"
+SEP="\n"
+
+notify-send -r $N_TOOL_HWSTAT \
+    "$USER@$(hostnamectl hostname) $(uptime -p)" \
+    "${SEP}${MEM_BAR}${SWAP_BAR}${SEP}${ROOT_BAR}${BOOT_BAR}${SEP}${VOL_BAR}${MIC_BAR}"

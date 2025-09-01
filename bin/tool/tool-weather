@@ -1,0 +1,14 @@
+#!/bin/zsh
+
+### tool-weather ##################################################################################
+# A command-line utility to display the current weather in your notification system.
+# Dependencies: curl, notify-send, zsh
+###################################################################################################
+
+source $(dirname $(readlink -e $0))/helpers
+
+ZIP="98146"
+CITY="Seattle, Washington, United States"
+
+WEATHER=$(curl "https://wttr.in/$ZIP?0QndAFT" | sed 's|\\|\\\\|g')
+notify-send -r $N_TOOL_WEATHER "$CITY" "${WEATHER}\n"

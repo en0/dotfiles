@@ -1,0 +1,16 @@
+#!/bin/bash
+# This script shows the current album through playerctl via dunst.
+# You can make this show the alert on change with the following command
+#
+# playerctl -F metadata --format "'{{title}}'" | xargs -n1 THIS-SCRIPT-PATH
+
+### notify-current-media ##########################################################################
+# Display the current media data.
+# Dependencies: playerctl, read, notify-send
+###################################################################################################
+
+source $(dirname $(readlink -e $0))/tool/helpers
+
+qfmt="{{title}}|{{mpris:artUrl}}|{{artist}}|{{album}}"
+IFS='|' read -r title art artist album < <(playerctl metadata --format $qfmt)
+notify-send -r $N_CURRENT_MEDIA -i "$art" "$title" "$album\n$artist"

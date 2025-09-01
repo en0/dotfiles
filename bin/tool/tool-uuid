@@ -1,0 +1,15 @@
+#!/bin/bash
+
+### tool-uuid #####################################################################################
+# A commandline tool to generate a UUID v4 and put it into the clipboard.
+# Dependencies: python3, python3-uuid, notify-send
+###################################################################################################
+
+source $(dirname $(readlink -e $0))/helpers
+
+NAME="󰬜 UUIDv4"
+
+UUID=$(python3 -m uuid -u uuid4 | tr -d '\n')
+echo $UUID | xsel -i -b && \
+    notify-send -u low "${NAME}" " ${UUID}" || \
+    notify-send -u critical "${NAME}" " Failed update clipboard!"

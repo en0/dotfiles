@@ -1,0 +1,17 @@
+#!/bin/bash
+
+### tool-bsae64_encode ############################################################################
+# A command-line utility to encode base64 that's in the clipboard.
+# Dependencies: send-notify, xsel, base64 (core/coreutils)
+###################################################################################################
+
+source $(dirname $(readlink -e $0))/helpers
+
+NAME="󰬉 Base64 Encode"
+
+ANS="$(xsel -o -b | base64 -w0 2>/dev/null)"
+[ ! $? -eq 0 ] && \
+    notify-send -u critical -e "${NAME}" " That input didn't seem right.\nAbort!" && \
+    exit 1
+echo "$ANS" | xsel -i -b
+notify-send -u low -e "${NAME}" " Success"

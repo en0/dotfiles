@@ -1,0 +1,57 @@
+#!/bin/bash
+
+# Constants used for notification IDs.
+# I put them here so its easy to avoid duplicates
+ N_CURRENT_MEDIA="50606001"
+     N_SET_AUDIO="50606002"
+   N_TOOL_HWSTAT="50606003"
+  N_TOOL_IP_INFO="50606004"
+  N_TOOL_WEATHER="50606005"
+N_TOOL_STOPWATCH="50606006"
+    N_TOOL_TIMER="40000000" # This needs a range of numbers
+
+# ceil-div - Cieling/Divide
+# Usage: ceil-div numerator denominator
+# Options
+#   numerator   - top part of the fraction
+#   denominator - bottom part of the fraction
+function ceil-div() {
+    local num=$1
+    local denom=$2
+    echo $(( (num + denom - 1) / denom ))
+}
+
+# render-bar - Render a progress bar
+# Usage: render-bar usage total
+# Options
+#   usage - A value between 0 and 100 (inclusive)
+#   total - The total width of the bar.
+function render-bar() {
+    local usage total filled empty
+    usage=$1
+    total=$2
+    filled=$(ceil-div $((usage * total)) 100)
+    empty=$((total - filled))
+    fill_char=$(printf '%.0s' $(seq 1 $filled))
+    empty=$(printf '%.0s' $(seq 1 $empty))
+    lead="" && [ $filled -eq 0 ] && lead=""
+    if [ $filled -eq 0 ]; then
+        printf "%s" "$empty"
+    elif [ $filled -eq $total ]; then
+        printf "%s" "$fill_char"
+    else
+        printf "%s%s" "$fill_char" "$empty"
+    fi
+}
+
+# format-time - Format seconds as HH:MM:SS
+# Usage: format-time seconds
+# Options:
+#   seconds - The total number of seconds.
+function format-time() {
+    local h m s
+    h=$(($1 / 3600))
+    m=$((($1 % 3600) / 60))
+    s=$(($1 % 60))
+    printf "%02d:%02d:%02d" "$h" "$m" "$s"
+}

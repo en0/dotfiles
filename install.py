@@ -8,9 +8,9 @@ import pathlib
 DOTFILES_ROOT = pathlib.Path(os.path.dirname(__file__))
 HOME_ROOT = pathlib.Path(os.path.expanduser("~"))
 DIRS = {
-    DOTFILES_ROOT / "bin": HOME_ROOT / ".local" / "bin",
+    DOTFILES_ROOT / "bin": HOME_ROOT / ".bin",
     DOTFILES_ROOT / "config": HOME_ROOT / ".config",
-    DOTFILES_ROOT / "env": HOME_ROOT / ".env.d",
+    #DOTFILES_ROOT / "env": HOME_ROOT / ".env.d",
 }
 
 

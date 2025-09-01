@@ -1,0 +1,11 @@
+#!/bin/bash
+
+### tool-excuse ###################################################################################
+# Fetch a programming excuse.
+# Dependencies: curl, send-notify
+###################################################################################################
+
+source $(dirname $(readlink -e $0))/helpers
+
+EXCUSE=$(curl http://programmingexcuses.com/ 2>/dev/null | grep -Po '([^<|>])+</a>')
+notify-send "󱀥 Programming Excuse" "${EXCUSE}"

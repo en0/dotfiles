@@ -1,0 +1,4 @@
+#!/bin/bash
+
+NOTIFY_CURRENT_MEDIA=$(dirname $(readlink -e $0))/notify-current-media
+playerctl -F metadata --format "'{{title}}'" > >( xargs -n1 $NOTIFY_CURRENT_MEDIA )

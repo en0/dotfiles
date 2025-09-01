@@ -1,0 +1,13 @@
+#!/bin/bash
+
+### tool-ip_info ##################################################################################
+# A command-line utility to display ip details in notification system
+# Dependencies: curl, ip, notify-send
+###################################################################################################
+
+source $(dirname $(readlink -e $0))/helpers
+
+IFACE=$(ip route | grep default | awk '{print $5}')
+LOCAL_IP=$(ip -4 address show dev $IFACE | grep -oP '(?<=inet\s)\d+(\.\d+){3}')
+PUBLIC_IP=$(curl ipv4.icanhazip.com)
+notify-send -r $N_TOOL_IP_INFO "$USER@$(hostnamectl hostname)" " Public: ${PUBLIC_IP}\n Local : ${LOCAL_IP} (${IFACE})\n"

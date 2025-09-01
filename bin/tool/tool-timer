@@ -1,0 +1,66 @@
+#!/bin/bash
+
+### tool-timer ####################################################################################
+# A count-down timer that will display in your notification system and play an alarm once one.
+# Note, this timer runs slow by 4 seconds over 10 minutes. (2:5)
+# Dependencies: notify-send
+###################################################################################################
+
+source $(dirname $(readlink -e $0))/helpers
+
+NAME="Timer"
+N_TOOL_TIMER=$((N_TOOL_TIMER + (1 + RANDOM % 100000)))
+
+function show() {
+    r=$(format-time $1)
+    [ $1 -eq 0 ] && u="critical" x="Times Up!" || u="normal"
+    notify-send -u $u -r $N_TOOL_TIMER "󰔟 $2 $r" "$x"
+}
+
+function launch-tool() {
+
+    local t_hours t_minutes t_seconds t_label t_dur
+
+    t_hours=0
+    t_minutes=0
+    t_seconds=0
+
+    # Prompt for the timer and extract all the parts
+    t_dur="$(dmenu -p "󰔟 ${NAME} (0h 0m 0s):" $@ </dev/null)"
+    [[ $t_dur =~ ([0-9]+)h ]] && t_hours=${BASH_REMATCH[1]}
+    [[ $t_dur =~ ([0-9]+)m ]] && t_minutes=${BASH_REMATCH[1]}
+    [[ $t_dur =~ ([0-9]+)s ]] && t_seconds=${BASH_REMATCH[1]}
+    [[ $t_dur =~ \[([^$]+)\] ]] && t_label="${BASH_REMATCH[1]}"
+    [[ "$t_label" == "" ]] && t_label="$NAME"
+
+    # Check for kill command
+    if [[ "${t_dur,,}" =~ ^(cancel|kill|stop) ]]; then
+        pid=$(pgrep -f "tool-timer execute $t_label")
+        [ $? -eq 0 ] && \
+            kill $pid && \
+            notify-send "󰔟 Cancel Timer" "$t_label cancled." || \
+            notify-send -u "critical" "󰔟 Cancel Timer" "Unable to find timer."
+    else
+        # Relaunch with the label so we can kill it later
+        $0 execute "$t_label" $t_hours $t_minutes $t_seconds
+    fi
+}
+
+function exec-tool() {
+    local t_label t_seconds
+    t_label="$2"
+    t_seconds=$(($5 + ($4 * 60) + ($3 * 3600)))
+
+    while [ $t_seconds -gt 0 ]; do
+        ((t_seconds--))
+        show "$t_seconds" "$t_label"
+        sleep 1
+    done
+}
+
+case "$1" in
+execute)
+    exec-tool "$@";;
+*)
+    launch-tool "$@";;
+esac

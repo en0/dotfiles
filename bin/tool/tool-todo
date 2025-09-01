@@ -1,0 +1,134 @@
+#!/bin/bash
+
+#### tool-todo ####################################################################################
+# A todo list manager
+# Dependencies: fzf, dmenu, ripgrep, tool-qtodo
+###################################################################################################
+
+source $(dirname $(readlink -e $0))/helpers
+
+NAME=" To-do List"
+TODO="$HOME/.todo-list"
+touch $TODO
+
+RG="rg --no-column --no-heading"
+
+# Filter Characters
+HIGH_PRIORITY="󱞾"
+LOW_PRIORITY="󱞤"
+ANY_PRIORITY="(󱞾|󱞤)"
+COMPLETED="󰱒"
+PENDING="󰄱"
+ALL_TASKS="(󰱒|󰄱)"
+
+function launch-tool() {
+    st \
+        -g 100x30 \
+        -c float \
+        -t "$NAME" \
+        -e $0 execute $@
+}
+
+function exec-add() {
+    task="$(dmenu -p "${NAME}:" $@ </dev/null)"
+    [[ "$task" == "" ]] && exit 1
+    [[ $task == +* ]] && u="$HIGH_PRIORITY" || u="$LOW_PRIORITY"
+    echo "$u $PENDING ${task#+}" >> $TODO
+
+    uc=$(grep "$HIGH_PRIORITY $PENDING" $TODO | wc -l)
+    lc=$(grep "$LOW_PRIORITY $PENDING" $TODO | wc -l)
+    total_items=$((uc + lc))
+    notify-send -u low "${NAME}" \
+        "Added to todo.\nYou have a total of $total_items items in your to-do list, of which $uc are urgent."
+}
+
+function exec-tool() {
+
+    CTEMP=$(mktemp)
+
+    RE_LOW_DO="$RG '$LOW_PRIORITY $PENDING' $TODO"
+    RE_LOW="reload($RE_LOW_DO)+change-prompt( Low Priority> )"
+
+    RE_HIGH_DO="$RG '$HIGH_PRIORITY $PENDING' $TODO"
+    RE_HIGH="reload($RE_HIGH_DO)+change-prompt( High Priority> )"
+
+    RE_ALL_DO="$RG '' $TODO"
+    RE_ALL="reload($RE_ALL_DO)+change-prompt( All> )"
+
+    RE_PENDING_DO="$RG '$PENDING' $TODO"
+    RE_PENDING="reload($RE_PENDING_DO)+change-prompt( Pending> )"
+
+    RE_COMPLETED_DO="$RG '$COMPLETED' $TODO"
+    RE_COMPLETED="reload($RE_COMPLETED_DO)+change-prompt( Completed> )"
+
+    EXEC_TOGGLE_COMPLETE="execute-silent(
+        f() {
+            [[ \${2} == $PENDING ]] && \
+                n=\$(echo \$@ | sed 's/$PENDING/$COMPLETED/g') || \
+                n=\$(echo \$@ | sed 's/$COMPLETED/$PENDING/g')
+            sed -i \"s/\$@/\$n/g\" $TODO
+        }; f {}
+    )"
+
+    EXEC_TOGGLE_URGENCY="execute-silent(
+        f() {
+            [[ \${1} == $LOW_PRIORITY ]] && \
+                n=\$(echo \$@ | sed 's/$LOW_PRIORITY/$HIGH_PRIORITY/g') || \
+                n=\$(echo \$@ | sed 's/$HIGH_PRIORITY/$LOW_PRIORITY/g')
+            sed -i \"s/\$@/\$n/g\" $TODO
+        }; f {}
+    )"
+
+    EXEC_NEW="execute-silent(
+        $(dirname $(readlink -e $0))/tool-todo add '$@'
+    )"
+
+    EXEC_DELETE="execute-silent(
+        l=\$(grep -n {} $TODO | awk -F: '{print \$1}')
+        sed -i \${l}d $TODO
+    )"
+
+    BLIND_RELOAD="reload(
+        V=\$(cat $CTEMP)
+        case \"\$V\" in
+        RE_LOW)
+            $RE_LOW_DO ;;
+        RE_HIGH)
+            $RE_HIGH_DO ;;
+        RE_ALL)
+            $RE_ALL_DO ;;
+        RE_PENDING)
+            $RE_PENDING_DO ;;
+        RE_COMPLETED)
+            $RE_COMPLETED_DO ;;
+        esac
+    )"
+
+    echo RE_PENDING>$CTEMP
+    $RG "$PENDING" $TODO | \
+    fzf --ansi \
+        --prompt " Pending> " \
+        --header-first \
+        --header $'C-a:All, C-l:Low, C-h:High, C-p:Pending, C-o:Completed\nC-n:New, C-d:Delete, C-u:Urgency, C-m:Toggle' \
+        --bind "ctrl-l:execute-silent(echo RE_LOW>$CTEMP)+$RE_LOW" \
+        --bind "ctrl-h:execute-silent(echo RE_HIGH>$CTEMP)+$RE_HIGH" \
+        --bind "ctrl-a:execute-silent(echo RE_ALL>$CTEMP)+$RE_ALL" \
+        --bind "ctrl-p:execute-silent(echo RE_PENDING>$CTEMP)+$RE_PENDING" \
+        --bind "ctrl-o:execute-silent(echo RE_COMPLETED>$CTEMP)+$RE_COMPLETED" \
+        --bind "ctrl-u:$EXEC_TOGGLE_URGENCY+$BLIND_RELOAD" \
+        --bind "enter:$EXEC_TOGGLE_COMPLETE+$BLIND_RELOAD" \
+        --bind "ctrl-n:$EXEC_NEW+$BLIND_RELOAD" \
+        --bind "ctrl-d:$EXEC_DELETE+$BLIND_RELOAD"
+    rm -rf $CTEMP
+}
+
+case "$1" in
+execute)
+    shift
+    exec-tool "$@" ;;
+add)
+    shift
+    exec-add "$@" ;;
+*)
+    launch-tool "$@" ;;
+esac

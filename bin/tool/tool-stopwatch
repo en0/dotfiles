@@ -1,0 +1,89 @@
+#!/bin/bash
+
+### tool-stopwatch ################################################################################
+# A stopwatch timer.
+# Note, this timer runs slow by 4 seconds over 10 minutes. (2:5)
+# Dependencies: dmenu, notify-send.
+###################################################################################################
+
+source $(dirname $(readlink -e $0))/helpers
+
+NAME=" Stopwatch"
+
+# Signals for IPC
+SIG_PAUSE="SIGUSR1"
+SIG_LAP="SIGUSR2"
+SIG_STOP="SIGABRT" # since the subprocess has not tty, cant use sigint
+
+# timer variables
+IS_PAUSED=0
+TIMER_VALUE=0
+LAPS=()
+
+function install-traps() {
+    trap toggle-pause $SIG_PAUSE
+    trap mark-lap $SIG_LAP
+}
+
+function toggle-pause() {
+    if [[ $IS_PAUSED -eq 0 ]]; then
+        IS_PAUSED=1
+    else
+        IS_PAUSED=0
+    fi
+}
+
+function mark-lap() {
+    LAPS+=($TIMER_VALUE)
+}
+
+function show() {
+    local m laps
+    [ $IS_PAUSED -eq 1 ] && m=" (Paused)"
+    laps=$(for i in "${!LAPS[@]}"; do
+        li=$((i + 1))
+        echo "Lap $li: $(format-time ${LAPS[$i]})"
+    done)
+    notify-send -r $N_TOOL_STOPWATCH "$NAME $(format-time $TIMER_VALUE)$m" "$laps"
+}
+
+function launch-tool() {
+
+    # If the timer is not running, start it and exit.
+    local pid actions
+    pid=$(pgrep -f "tool-stopwatch execute")
+    if [ ! $? -eq 0 ]; then
+        $0 execute &
+        exit
+    fi
+
+    # otherwise, show the options. If no action was selected, do nothing.
+    action=$(echo -e "Pause\nLap\nClear" | dmenu -i -p "${NAME}:" $@)
+    [[ "$action" == "" ]] && exit
+
+    # Send signal to the timer
+    case "$action" in
+    Pause)
+        kill -s $SIG_PAUSE $pid ;;
+    Lap)
+        kill -s $SIG_LAP $pid ;;
+    Clear)
+        kill -s $SIG_STOP $pid ;;
+    esac
+}
+
+function exec-tool() {
+    install-traps
+    while true; do
+        [ $IS_PAUSED -eq 0 ] && ((TIMER_VALUE++))
+        show
+        sleep 1
+    done
+}
+
+case "$1" in
+execute)
+    exec-tool "$@";;
+*)
+    launch-tool "$@";;
+esac

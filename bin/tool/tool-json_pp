@@ -1,0 +1,17 @@
+#!/bin/bash
+
+### tool-json_pp ##################################################################################
+# A command-line utility to pretty print any json in the clipboard.
+# Dependencies: send-notify, xsel, json_pp (extra/intel-oneapi-basekit)
+###################################################################################################
+
+source $(dirname $(readlink -e $0))/helpers
+
+NAME="󱃖 Json Pretty Print"
+
+ANS="$(xsel -o -b | json_pp 2>/dev/null)"
+[ ! $? -eq 0 ] && \
+    notify-send -u critical "${NAME}" " That input didn't seem right.\nAbort!" && \
+    exit 1
+echo "$ANS" | xsel -i -b
+notify-send -u low "${NAME}" " Success"

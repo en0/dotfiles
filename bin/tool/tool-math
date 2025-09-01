@@ -1,0 +1,16 @@
+#!/bin/bash
+
+### tool-math #####################################################################################
+# A command-line utility for performing mathematical calculations using dmenu and bc.
+# Dependencies: dmenu, bc, notify-send.
+###################################################################################################
+
+source $(dirname $(readlink -e $0))/helpers
+
+NAME="󰿉 Math"
+
+EQU="$(dmenu -p "${NAME}:" $@ </dev/null)"
+[[ "$EQU" == "" ]] && exit
+ANS=$(echo "$EQU" | bc)
+echo $ANS | xsel -b
+notify-send "${NAME}" " ${EQU} = ${ANS}"

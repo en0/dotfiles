@@ -1,0 +1,87 @@
+#!/bin/bash
+
+### tool-notes ####################################################################################
+# A tool to manage notes.
+# Dependencies: ripgrep, fzf, nvim (or set $EDITOR)
+###################################################################################################
+
+source $(dirname $(readlink -e $0))/helpers
+
+# All notes are stored here
+NOTEDIR=$HOME/Documents/Notes
+mkdir -p $NOTEDIR
+
+# Search patterns - This is connected to the structure of the file.
+RG_ARGS="--no-column --no-heading --type md --pcre2 --color=always -o"
+BY_TAG="reload(rg $RG_ARGS '(?<=^- \*\*Tags\*\*:).*')"
+BY_CREATE="reload(rg $RG_ARGS '(?<=^- \*\*Created\*\*:).*')"
+BY_MODIF="reload(rg $RG_ARGS '(?<=^- \*\*Modified\*\*:).*')"
+
+[[ "$EDITOR" == "" ]] && EDITOR=/usr/bin/nvim
+
+function launch-tool() {
+    st -t " Notes" \
+       -e $0 execute
+}
+
+function exec-tool() {
+    local selected
+
+    # Moving here just simplifies the world
+    cd $NOTEDIR
+
+    # Create a "new note" file to make it a menu option with a helpful preview.
+    echo "Create a new note" > " New Note"
+
+    # Prompt the user for the note. FZF is awesome
+    selected=$(
+        ls -1 | \
+        fzf --ansi \
+            --prompt " Select a note> " \
+            --preview "f(){cat \${1%%:*}}; f {}" \
+            --preview-window="up,70%" \
+            --header-first \
+            --header "Ctrl-t:Search by Tags, Ctrl-d:Search by Created Date, Ctrl-f:Search by Modified Date" \
+            --bind "ctrl-d:$BY_CREATE+change-prompt(󰩉 Search by Created Date> )" \
+            --bind "ctrl-f:$BY_MODIF+change-prompt(󰩉 Search by Modified Date> )" \
+            --bind "ctrl-t:$BY_TAG+change-prompt(󰩉 Search by Tags> )" \
+            --bind "enter:accept" | awk -F: '{print $1}'
+    )
+
+    # Delete that fake "new note" file.
+    rm -rf " New Note"
+
+    # If nothing was selected, like they escaped-out, exit.
+    [[ "${selected}" == "" ]] && exit
+
+    # If the new note file was selected, prompt for the note name and stuff in the template.
+    if [[ "${selected}" == " New Note" ]]; then
+        read -p " Name: " -r name
+        selected="${name// /_}-$(date "+%y%m%d%s").md"
+
+        # Keep this in sync with the todo tool
+        touch "$selected"
+        echo -e "# Note: $name\n" >> "$selected"
+        echo -e "- **Created**: $(date +"%B %d, %Y")" >> "$selected"
+        echo -e "- **Modified**: $(date +"%B %d, %Y")" >> "$selected"
+        echo -e "- **Tags**:" >> "$selected"
+        echo -e "\n---\n\n## Notes\n\n" >> "$selected"
+    fi
+
+    # Capture the digest of the opened note so we can check if the modified date needs updated.
+    digest="$(sha1sum "$selected")"
+
+    # Do the edit bit.
+    $EDITOR "$selected"
+
+    # If the digest changed, update the modified date
+    [[ "$digest" != "$(sha1sum "$selected")" ]] && \
+        sed -i "s/^- \*\*Modified\*\*: .*/- \*\*Modified\*\*: $(date +"%B %d, %Y")/" "$selected"
+}
+
+case "$1" in
+execute)
+    exec-tool "$@";;
+*)
+    launch-tool "$@";;
+esac

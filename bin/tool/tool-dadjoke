@@ -1,0 +1,11 @@
+#!/bin/bash
+
+### tool-dadjoke ###################################################################################
+# Fetch a dad joke.
+# Dependencies: curl, send-notify
+###################################################################################################
+
+source $(dirname $(readlink -e $0))/helpers
+
+JOKE=$(curl -H 'Accept: text/plain' https://icanhazdadjoke.com)
+notify-send " Dad Joke" "${JOKE}"

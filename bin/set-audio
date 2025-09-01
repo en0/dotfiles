@@ -1,0 +1,45 @@
+#!/bin/bash
+
+### set-audio #####################################################################################
+# adjust the given mixer state/value.
+# Dependencies: amixer, notify-send
+###################################################################################################
+
+source $(dirname $(readlink -e $0))/tool/helpers
+
+show() {
+    value=$(amixer get "$1" | grep -oP '\d+%' | head -n 1)
+    muted=$(amixer get "$1" | grep -oP '\[(on|off)\]' | head -n1)
+    msg="Volume: $value"
+    [[ "$muted" == *"off"* ]] && msg="$msg (muted)"
+    notify-send -r $N_SET_AUDIO "$1 Control" " ${msg}\n $(render-bar ${value::-1} 39)"
+}
+
+if [ "$#" -lt 2 ]; then
+    echo "Usage: $0 <element> <operation>"
+    exit 1
+fi
+
+ELEMENT="$1"
+OPERATION="$2"
+
+toggle_mute() {
+    amixer set "$ELEMENT" toggle 1>/dev/null
+    show $ELEMENT
+}
+
+adjust_volume() {
+    amixer set "$ELEMENT" "$1" 1>/dev/null
+    show $ELEMENT
+}
+
+# Main logic
+case "$OPERATION" in
+    toggle)
+        toggle_mute
+        ;;
+    *)
+        # Pass through to amixer for volume adjustments
+        adjust_volume "$OPERATION"
+        ;;
+esac
