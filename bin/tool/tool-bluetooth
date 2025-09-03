@@ -1,0 +1,60 @@
+#!/bin/bash
+
+
+function launch-tool() {
+    st \
+        -g 60x15 \
+        -c float \
+        -t "Clipboard History" \
+        -e $0 execute
+}
+
+function exec-tool() {
+    BT_CACHE=$(mktemp -d)
+    BT_PAIRED=$BT_CACHE/Paired
+    BT_CONNECTED=$BT_CACHE/Connected
+
+    echo "" > $BT_PAIRED
+    echo "" > $BT_CONNECTED
+
+    FZF_RELOAD="reload(
+        bluetoothctl devices Paired | grep -Po '^Device \K(.*)'  > $BT_PAIRED
+        bluetoothctl devices Connected | grep -Po '^Device \K(.*)' > $BT_CONNECTED
+        while IFS= read -r line; do
+            [[ \$(rg -c "\${line:0:17}" $BT_CONNECTED) -ge 1 ]] && echo  \${line:18} || echo  \${line:18}
+        done < $BT_PAIRED
+    )"
+
+    FZF_TOGGLE_CONNECT="execute(
+        f() {
+            clear
+            rec=\$(grep \"\${1:2}\" $BT_PAIRED)
+            [[ \$(rg -c "\${rec:0:17}" $BT_CONNECTED) -ge 1 ]] && \
+            bluetoothctl disconnect \${rec:0:17} || \
+            bluetoothctl connect \${rec:0:17}
+            [[ ! \$? -eq 0 ]] && sleep 3
+        }; f {}
+    )"
+
+    bluetoothctl devices Paired | grep -Po '^Device \K(.*)'  > $BT_PAIRED
+    bluetoothctl devices Connected | grep -Po '^Device \K(.*)' > $BT_CONNECTED
+
+    while IFS= read -r line; do
+        [[ $(rg -c "${line:0:18}" $BT_CONNECTED) -ge 1 ]] \
+            && echo  ${line:18} || echo  ${line:17}
+    done < $BT_PAIRED | fzf \
+        --no-input \
+        --header $"Enter:[dis]Connect, C-r:Reload" \
+        --header-border "line" \
+        --bind "change:hide-preview" \
+        --bind "ctrl-r:$FZF_EXEC_RELOAD" \
+        --bind "enter:$FZF_TOGGLE_CONNECT+$FZF_RELOAD"
+    rm -rf "$BT_CACHE"
+}
+
+case "$1" in
+execute)
+    exec-tool ;;
+*)
+    launch-tool ;;
+esac
