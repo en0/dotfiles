@@ -17,7 +17,8 @@ BY_TAG="reload(rg $RG_ARGS '(?<=^- \*\*Tags\*\*:).*')"
 BY_CREATE="reload(rg $RG_ARGS '(?<=^- \*\*Created\*\*:).*')"
 BY_MODIF="reload(rg $RG_ARGS '(?<=^- \*\*Modified\*\*:).*')"
 
-[[ "$EDITOR" == "" ]] && EDITOR=/usr/bin/nvim
+#[[ "$EDITOR" == "" ]] && EDITOR=/usr/bin/nvim
+EDITOR=/usr/local/bin/nvim
 
 function launch-tool() {
     st -t " Notes" \
@@ -30,9 +31,6 @@ function exec-tool() {
     # Moving here just simplifies the world
     cd $NOTEDIR
 
-    # Create a "new note" file to make it a menu option with a helpful preview.
-    echo "Create a new note" > " New Note"
-
     # Prompt the user for the note. FZF is awesome
     selected=$(
         ls -1 | \
@@ -41,21 +39,19 @@ function exec-tool() {
             --preview "f(){cat \${1%%:*}}; f {}" \
             --preview-window="up,70%" \
             --header-first \
-            --header "Ctrl-t:Search by Tags, Ctrl-d:Search by Created Date, Ctrl-f:Search by Modified Date" \
+            --header $'C-n: New Note\nC-t:Search by Tags, C-d:Search by Created Date, C-f:Search by Modified Date' \
             --bind "ctrl-d:$BY_CREATE+change-prompt(󰩉 Search by Created Date> )" \
             --bind "ctrl-f:$BY_MODIF+change-prompt(󰩉 Search by Modified Date> )" \
             --bind "ctrl-t:$BY_TAG+change-prompt(󰩉 Search by Tags> )" \
+            --bind "ctrl-n:become( echo '\$ New Note')+abort" \
             --bind "enter:accept" | awk -F: '{print $1}'
     )
-
-    # Delete that fake "new note" file.
-    rm -rf " New Note"
 
     # If nothing was selected, like they escaped-out, exit.
     [[ "${selected}" == "" ]] && exit
 
     # If the new note file was selected, prompt for the note name and stuff in the template.
-    if [[ "${selected}" == " New Note" ]]; then
+    if [[ "${selected}" == "\$ New Note" ]]; then
         read -p " Name: " -r name
         selected="${name// /_}-$(date "+%y%m%d%s").md"
 
