@@ -24,7 +24,7 @@ return {
             update_cwd = false,
 
             system_open = {cmd = nil, args = {}},
-            view = {width = 30, side = "left"},
+            view = {width = 50, side = "left"},
 
             diagnostics = {
                 enable = true,
