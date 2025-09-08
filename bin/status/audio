@@ -1,0 +1,10 @@
+#!/bin/bash
+
+read -r vvol vstate < <(amixer sget Master | grep -P 'Front Left:' | awk '{print $5 $6}' | grep -Po '\w*' | xargs)
+read -r cvol mstate < <(amixer sget Capture | grep -P 'Front Left:' | awk '{print $5 $6}' | grep -Po '\w*' | xargs)
+
+[[ "${vstate}" == "on" ]] && vicon="󰕾" || vicon="󰖁"
+[[ "${mstate}" == "on" ]] && micon="󰍬" || micon="󰍭"
+
+#printf "%s %d%%  %s %d%%" $micon $cvol $vicon $vvol
+printf "%s%s %d%%" $micon $vicon $vvol

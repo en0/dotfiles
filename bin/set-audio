@@ -43,3 +43,4 @@ case "$OPERATION" in
         adjust_volume "$OPERATION"
         ;;
 esac
+signal-status $SIG_AUDIO

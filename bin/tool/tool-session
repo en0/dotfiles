@@ -1,0 +1,21 @@
+#!/bin/bash
+
+### tool-session ##################################################################################
+# A tool to manage your current window-manager session.
+# Dependencies: dmenu
+###################################################################################################
+
+NAME=" Session"
+
+SEL=$(echo -e "Logout\nSuspend\nPoweroff\nRestart" | dmenu -i -p "${NAME}" $@)
+[[ "$SEL" == "" ]] && exit
+case "$SEL" in
+    Logout)
+        pkill dwm ;;
+    Suspend)
+        systemctl suspend ;;
+    Poweroff)
+        systemctl poweroff ;;
+    Restart)
+        systemctl reboot ;;
+esac
