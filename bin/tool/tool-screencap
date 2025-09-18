@@ -1,0 +1,65 @@
+#!/bin/bash
+
+### tool-screencap ################################################################################
+# Record the screen and audio channel.
+# Dependencies: libva libva-mesa-driver libva-utils xorg-xwininfo xdotool
+###################################################################################################
+
+source $(dirname $(readlink -e $0))/helpers
+
+LAUNCHCMD="$0"
+CAPDIR=$HOME/Videos/screencaps
+CAP=$CAPDIR/$(date "+%y%m%d%s").mp4
+VAAPI_DEVICE="/dev/dri/renderD128"
+MONITOR_DEV="alsa_output.pci-0000_0f_00.6.analog-stereo.monitor"
+CAPTURE_DEV="alsa_input.usb-Generic_Blue_Microphones_LT_2409251048429D0100AE_111000-00.analog-stereo"
+SIG_STOP="SIGUSR1"
+FFMPEG_PID_FILE=/tmp/tool-screencap-pid
+
+mkdir -p $CAPDIR
+
+FFMPEG_PID=$(cat $FFMPEG_PID_FILE 2>/dev/null)
+if [[ ! -z "$FFMPEG_PID" ]]
+then
+    rm -f $FFMPEG_PID_FILE
+    echo Stopping capture $FFMPEG_PID
+    kill $FFMPEG_PID
+    exit
+fi
+
+mode="${1:-window}"
+w=0
+h=0
+
+if [ "$mode" == "fullscreen" ]
+then
+    IFS='x' read w h < <(
+        xrandr | \
+            awk '/ connected/{if($3=="primary"){print $4; exit} else if($3~/^[0-9]+x[0-9]+\+/){print $3; exit}}' | \
+            sed 's/+.*//'
+    )
+else
+    win=$(xdotool getactivewindow) || exit 1
+    read x y w h <<< $(xwininfo -id "$win" | awk -F: '
+        /Absolute upper-left X/ {x=$2+0}
+        /Absolute upper-left Y/ {y=$2+0}
+        /Width/ {w=$2+0}
+        /Height/ {h=$2+0}
+        END {print x, y, w, h}
+    ')
+fi
+
+ffmpeg \
+    -f x11grab -framerate 60 -video_size "${w}x${h}" -i :0.0+"${x},${y}" \
+    -f pulse -i "$MONITOR_DEV" \
+    -f pulse -i "$CAPTURE_DEV" \
+    -filter_complex "[1:a]volume=1.0[sys];[2:a]volume=1.0[mic];[sys][mic]amerge=inputs=2[aout]" \
+    -map 0:v -map "[aout]" \
+    -vf "format=nv12,hwupload,scale_vaapi=w=${w}:h=${h}" \
+    -vaapi_device $VAAPI_DEVICE -c:v h264_vaapi -qp 24 \
+    -c:a aac -b:a 192k -ac 2 -ar 48000 \
+    -max_muxing_queue_size 1024 -y $CAP &
+
+FFMPEG_PID=$!
+echo $FFMPEG_PID > $FFMPEG_PID_FILE
+wait $FFMPEG_PID

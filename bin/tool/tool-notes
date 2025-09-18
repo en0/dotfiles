@@ -18,7 +18,7 @@ BY_CREATE="reload(rg $RG_ARGS '(?<=^- \*\*Created\*\*:).*')"
 BY_MODIF="reload(rg $RG_ARGS '(?<=^- \*\*Modified\*\*:).*')"
 
 #[[ "$EDITOR" == "" ]] && EDITOR=/usr/bin/nvim
-EDITOR=/usr/local/bin/nvim
+EDITOR="$(which nvim)"
 
 function launch-tool() {
     st -t " Notes" \
@@ -61,7 +61,7 @@ function exec-tool() {
         echo -e "- **Created**: $(date +"%B %d, %Y")" >> "$selected"
         echo -e "- **Modified**: $(date +"%B %d, %Y")" >> "$selected"
         echo -e "- **Tags**:" >> "$selected"
-        echo -e "\n---\n\n## Notes\n\n" >> "$selected"
+        echo -e "\n---\n\n# Notes\n\n" >> "$selected"
     fi
 
     # Capture the digest of the opened note so we can check if the modified date needs updated.
