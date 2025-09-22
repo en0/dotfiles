@@ -1,0 +1,60 @@
+#!/bin/bash
+
+
+function launch-tool() {
+    st \
+        -g 60x15 \
+        -c float \
+        -t "Virtual Machines" \
+        -e $0 execute
+}
+
+function exec-tool() {
+    VM_CACHE=$(mktemp -d)
+    VM_ALL=$VM_CACHE/All
+    VM_ACTIVE=$VM_CACHE/Active
+
+    echo "" > $VM_ALL
+    echo "" > $VM_ACTIVE
+
+    FZF_RELOAD="reload(
+        sudo virsh list --all --name > $VM_ALL
+        sudo virsh list --name > $VM_ACTIVE
+        while read -r line; do
+            [[ -z "\$line" ]] && continue
+            [[ \$(rg -c "\${line}" $VM_ACTIVE) -ge 1 ]] && echo   \${line} || echo   \${line}
+        done < $VM_ALL
+    )"
+
+    FZF_TOGGLE_CONNECT="execute(
+        f() {
+            clear
+            [[ \$(rg -c "\${1:2}" $VM_ACTIVE) -ge 1 ]] && \
+            sudo virsh shutdown \${1:2} || \
+            sudo virsh start \${1:2}
+            sleep 3
+        }; f {}
+    )"
+
+    sudo virsh list --all --name > $VM_ALL
+    sudo virsh list --name > $VM_ACTIVE
+
+    while read -r line; do
+        [[ -z "$line" ]] && continue
+        [[ $(rg -c "${line}" $VM_ACTIVE) -ge 1 ]] \
+            && echo   ${line} || echo   ${line}
+    done < $VM_ALL | fzf \
+        --no-input \
+        --header $"Enter:Toggle-Power, C-r:Reload" \
+        --header-border "line" \
+        --bind "ctrl-r:$FZF_RELOAD" \
+        --bind "enter:$FZF_TOGGLE_CONNECT+$FZF_RELOAD"
+    rm -rf "$VM_CACHE"
+}
+
+case "$1" in
+execute)
+    exec-tool ;;
+*)
+    launch-tool ;;
+esac

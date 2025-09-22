@@ -47,7 +47,7 @@ function exec-tool() {
         --header $"Enter:[dis]Connect, C-r:Reload" \
         --header-border "line" \
         --bind "change:hide-preview" \
-        --bind "ctrl-r:$FZF_EXEC_RELOAD" \
+        --bind "ctrl-r:$FZF_RELOAD" \
         --bind "enter:$FZF_TOGGLE_CONNECT+$FZF_RELOAD"
     rm -rf "$BT_CACHE"
 }
