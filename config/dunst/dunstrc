@@ -24,7 +24,7 @@
     # dynamic width from 0 to 300
     # width = (0, 300)
     # constant width of 300
-    width = 360
+    width = 490
 
     # The maximum height of a single notification, excluding the frame.
     height = (0, 400)
@@ -125,7 +125,7 @@
 
     ### Text ###
 
-    font = JetBrainsMonoNerdFontMono 10
+    font = JetBrainsMonoNerdFontMono 14
     #font = JetBrainsMonoNerdFontMono-Regular 20
 
     # The spacing between lines.  If the height is smaller than the
