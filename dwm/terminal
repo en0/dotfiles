@@ -1,0 +1,22 @@
+#!/bin/bash
+
+# Source theme
+source ~/.dwm/theme
+
+TARGET="$1"
+shift
+
+case "$TARGET" in
+    "Local"|"")
+        # Local execution - use st
+        st "$@"
+        ;;
+    "Patsy")
+        # Remote execution via SSH - use st with X forwarding
+        ssh patsy "st $*"
+        ;;
+    *)
+        # Generic remote target - use st or fallback to xterm
+        ssh "$TARGET" "st $* || xterm $*"
+        ;;
+esac

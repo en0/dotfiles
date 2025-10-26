@@ -10,6 +10,7 @@ HOME_ROOT = pathlib.Path(os.path.expanduser("~"))
 DIRS = {
     DOTFILES_ROOT / "bin": HOME_ROOT / ".bin",
     DOTFILES_ROOT / "config": HOME_ROOT / ".config",
+    DOTFILES_ROOT / "dwm": HOME_ROOT / ".dwm",
     #DOTFILES_ROOT / "env": HOME_ROOT / ".env.d",
 }
 

@@ -1,0 +1,23 @@
+#!/bin/bash
+
+# Source theme
+source ~/.dwm/theme
+
+TARGET="$1"
+shift
+
+case "$TARGET" in
+    "Local"|"")
+        # Local execution - use dmenu
+        dmenu_run -p " Launch:" -fn "$FONT_LOCAL" \
+                  -nb "$DMENU_NB" -nf "$DMENU_NF" -sb "$DMENU_SB" -sf "$DMENU_SF"
+        ;;
+    "Patsy")
+        # Remote execution via SSH - use dmenu with font alias
+        ssh patsy "dmenu_run -p ' Launch:' -fn '$FONT_REMOTE' -nb '$DMENU_NB' -nf '$DMENU_NF' -sb '$DMENU_SB' -sf '$DMENU_SF'"
+        ;;
+    *)
+        # Generic remote target - use fallback font
+        ssh "$TARGET" "dmenu_run -p ' Launch:' -fn '$FONT_FALLBACK' -nb '$DMENU_NB' -nf '$DMENU_NF' -sb '$DMENU_SB' -sf '$DMENU_SF'"
+        ;;
+esac

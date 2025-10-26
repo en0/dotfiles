@@ -1,0 +1,20 @@
+#!/bin/bash
+# DWM Color Theme
+# Extracted from dwm config.h
+
+# Color definitions
+COL_CAKEPOP_SORBET="#fbc850"
+COL_COCO_BLACK="#1c1c1c"
+COL_DARK_CHARCOAL="#333333"
+COL_MOSSY="#836f3f"
+
+# dmenu/rofi color scheme
+DMENU_NB="$COL_COCO_BLACK"     # normal background
+DMENU_NF="$COL_MOSSY"          # normal foreground
+DMENU_SB="$COL_DARK_CHARCOAL"  # selected background
+DMENU_SF="$COL_CAKEPOP_SORBET" # selected foreground
+
+# Font settings
+FONT_LOCAL="JetBrainsMonoNerdFont:pixelsize=25"
+FONT_REMOTE="JetBrainsMonoNerdFont:pixelsize=25"
+FONT_FALLBACK="JetBrainsMono:size=10"
