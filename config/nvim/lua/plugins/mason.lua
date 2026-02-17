@@ -27,7 +27,6 @@ return {
             --"jedi_language_server", --# Only one so far to get defintion call right
         }
 
-        local lspconfig = require("lspconfig")
         local blink_cmp = require("blink.cmp")
 
         require("mason").setup()
@@ -35,12 +34,14 @@ return {
 
         -- Setup each server
         for _, server in ipairs(servers) do
-            lspconfig[server].setup({
+            vim.lsp.config(server, {
                 on_attach = on_attach,
                 capabilities = blink_cmp.get_lsp_capabilities(),
                 flags = {debounce_text_changes = 150},
             })
         end
+
+        vim.lsp.enable(servers)
 
         -- Show the diag float on hover
         vim.api.nvim_create_autocmd({ "CursorHold" }, {

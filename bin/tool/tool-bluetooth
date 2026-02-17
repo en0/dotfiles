@@ -43,9 +43,7 @@ function exec-tool() {
         [[ $(rg -c "${line:0:18}" $BT_CONNECTED) -ge 1 ]] \
             && echo  ${line:18} || echo  ${line:17}
     done < $BT_PAIRED | fzf \
-        --no-input \
         --header $"Enter:[dis]Connect, C-r:Reload" \
-        --header-border "line" \
         --bind "change:hide-preview" \
         --bind "ctrl-r:$FZF_EXEC_RELOAD" \
         --bind "enter:$FZF_TOGGLE_CONNECT+$FZF_RELOAD"
