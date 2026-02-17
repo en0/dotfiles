@@ -27,6 +27,7 @@ repository to their respective locations in your home directory.
 
 ```bash
 [ -d "$HOME/.env.d" ] && for f in $HOME/.env.d/*.env; do source $f; done
+[ -f "$HOME/.env.d/hosts/`hostname`.env" ] && source "$HOME/.env.d/hosts/`hostname`.env"
 ```
 
 This line will activate the files in `$HOME/.env.d` each time your shell is
@@ -61,7 +62,9 @@ To update the dotfiles in this repository:
 ```bash
 cd ~/.dotfiles
 git pull origin main
-./install.py
+./install.py -d -n
+# If everything looks good,
+./install.py -d
 ```
 
 # Related
