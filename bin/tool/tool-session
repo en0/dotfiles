@@ -11,7 +11,7 @@ SEL=$(echo -e "Logout\nSuspend\nPoweroff\nRestart" | dmenu -i -p "${NAME}" $@)
 [[ "$SEL" == "" ]] && exit
 case "$SEL" in
     Logout)
-        pkill dwm ;;
+        i3-msg exit ;;
     Suspend)
         systemctl suspend ;;
     Poweroff)

@@ -22,6 +22,8 @@ EDITOR="$(which nvim)"
 
 function launch-tool() {
     st -t " Notes" \
+       -g 150x50 \
+       -c float \
        -e $0 execute
 }
 

@@ -1,0 +1,29 @@
+#!/bin/bash
+
+### tool-math_mc ##################################################################################
+# Math but show the answer in stacks and blocks for minecraft.
+# Dependencies: dmenu, bc, notify-send.
+###################################################################################################
+
+source $(dirname $(readlink -e $0))/helpers
+
+NAME="󰿉 Minecraft Math"
+
+EQU="$(dmenu -p "${NAME}:" $@ </dev/null)"
+[[ "$EQU" == "" ]] && exit
+
+# The actual answer
+ANS=$(echo "$EQU" | bc)
+
+# Stack size 64
+STACK_64=$(echo "$ANS / 64" | bc)
+STACK_64_T=$(echo "$STACK_64 * 64" | bc)
+PART_64=$(echo "$ANS - $STACK_64_T" | bc)
+
+# Stack size 16
+STACK_16=$(echo "$ANS / 16" | bc)
+STACK_16_T=$(echo "$STACK_16 * 16" | bc)
+PART_16=$(echo "$ANS - $STACK_16_T" | bc)
+
+echo $ANS | xsel -b
+notify-send "${NAME}" " ${EQU} = ${ANS}\nS64: ${STACK_64}+${PART_64}\nS16: ${STACK_16}+${PART_16}"

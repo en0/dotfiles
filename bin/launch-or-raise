@@ -1,0 +1,20 @@
+#!/bin/bash
+
+# Check if the correct number of arguments are provided
+if [ "$#" -ne 2 ]; then
+    echo "Usage: $0 <binary_name> <class_name>"
+    exit 1
+fi
+
+BINARY_NAME=$1
+CLASS_NAME=$2
+
+# Check if the application is running
+if pgrep -x "$BINARY_NAME" > /dev/null
+then
+    # If running, focus on it
+    i3-msg "[class=\"$CLASS_NAME\"] focus"
+else
+    # If not running, start the application
+    $BINARY_NAME &
+fi

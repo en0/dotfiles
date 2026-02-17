@@ -1,0 +1,33 @@
+set $mod Mod4
+
+set $pango_font         pango:JetBrainsMonoNerdFont 10
+set $font               JetBrainsMonoNerdFont:size=13
+set $monitor01          DisplayPort-1
+set $monitor02          DisplayPort-0
+
+set $workspace01        "1:1"
+set $workspace02        "2:2"
+set $workspace03        "3:3"
+set $workspace04        "4:4"
+set $workspace05        "5:5"
+set $workspace06        "6:6"
+set $workspace07        "7:7"
+set $workspace08        "8:8"
+set $workspace09        "9:9"
+set $workspace10        "10:10"
+
+set $col_cakepop_sorbet #fbc850
+set $col_cakepop_gold   #c9961e
+set $col_coco_black     #1c1c1c
+set $col_dark_charcoal  #333333
+set $col_mossy          #836f3f
+set $col_urgent         #836f3f
+
+include "ini.d/layouts.ini"
+include "ini.d/workspace.ini"
+include "ini.d/containers.ini"
+include "ini.d/windows.ini"
+include "ini.d/bars.ini"
+include "ini.d/modes.ini"
+include "ini.d/bindings.ini"
+include "ini.d/startup.ini"

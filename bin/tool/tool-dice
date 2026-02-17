@@ -1,0 +1,56 @@
+#!/bin/bash
+
+### tool-dice ###################################################################################
+# roll dice.
+# Dependencies: dunst, send-notify
+###################################################################################################
+
+source $(dirname $(readlink -e $0))/helpers
+
+NAME="  Dice"
+SIDES=
+COUNT=1
+
+function parse() {
+    if [[ $1 =~ ([0-9]+)d([0-9]+) ]]; then
+        COUNT=${BASH_REMATCH[1]}
+        SIDES=${BASH_REMATCH[2]}
+    elif [[ $1 =~ d([0-9]+) ]]; then
+        SIDES=${BASH_REMATCH[1]}
+    else
+        return 1
+    fi
+    return 0
+}
+
+function launch-tool() {
+    d="$(dmenu -p "${NAME}:" $@ </dev/null)"
+    [[ "$d" == "" ]] && exit
+    a=$($0 execute "$d" 2>&1)
+    if [[ ! $? -eq 0 ]]; then
+        notify-send -u critical "${NAME}" "$a"
+        exit 1
+    else
+        notify-send "${NAME} (${d})" "$(echo $a)"
+    fi
+}
+
+function exec-tool() {
+    shift
+    parse "$@"
+    if [ ! $? -eq 0 ]; then
+        echo -e "That input didn't seem right.\nExample: 2d6 -> Roll 2 dice with 6 sides." >&2
+        exit 1
+    fi
+    while [[ $COUNT -gt 0 ]]; do
+        ((COUNT--))
+        echo $[1 + $RANDOM % $SIDES]
+    done
+}
+
+case "$1" in
+execute)
+    exec-tool "$@";;
+*)
+    launch-tool "$@";;
+esac
