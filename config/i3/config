@@ -21,12 +21,12 @@ set $col_dark_charcoal  #333333
 set $col_mossy          #836f3f
 set $col_urgent         #836f3f
 
-include ini.d/host_`hostname`.ini
-include ini.d/layouts.ini
-include ini.d/workspace.ini
-include ini.d/containers.ini
-include ini.d/windows.ini
-include ini.d/bars.ini
-include ini.d/modes.ini
-include ini.d/bindings.ini
-include ini.d/startup.ini
+include ~/.config/i3/ini.d/host_`hostname`.ini
+include ~/.config/i3/ini.d/layouts.ini
+include ~/.config/i3/ini.d/workspace.ini
+include ~/.config/i3/ini.d/containers.ini
+include ~/.config/i3/ini.d/windows.ini
+include ~/.config/i3/ini.d/bars.ini
+include ~/.config/i3/ini.d/modes.ini
+include ~/.config/i3/ini.d/bindings.ini
+include ~/.config/i3/ini.d/startup.ini
