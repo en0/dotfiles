@@ -14,6 +14,7 @@ N_TOOL_STOPWATCH="50606006"
 # Signal values to update nenostatus from scripts.
 STATUS_BIN="nenostatus"
 SIG_AUDIO=34
+SIG_CLIP=35
 
 # signal-status - Signal the Status Application
 # Usage: signal-status rtsig
@@ -21,7 +22,7 @@ SIG_AUDIO=34
 #   rtsig - An integer that is the signal to send
 function signal-status() {
     local rtsig=$1
-    pkill -34 $STATUS_BIN
+    pkill -$rtsig $STATUS_BIN
 }
 
 # ceil-div - Cieling/Divide

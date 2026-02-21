@@ -1,0 +1,38 @@
+#!/bin/bash
+
+source $(dirname $(readlink -e $0))/tool/helpers
+
+if [ "$#" -lt 1 ]; then
+    echo "Usage: $0 <action>"
+    exit 1
+fi
+
+ACTION="$1"
+
+start-recorder() {
+    exec gpu-screen-recorder \
+        -w DisplayPort-1 \
+        -a default_output \
+        -f 25 \
+        -c mp4 \
+        -r 60 \
+        -q high \
+        -o ~/Videos/screencaps/ 1> /dev/null 2> /dev/null &
+}
+
+toggle-buffer() {
+    pgrep -f gpu-screen-recorder > /dev/null && \
+        pkill -f gpu-screen-recorder > /dev/null ||
+        start-recorder
+    sleep 0.5
+}
+
+case "$ACTION" in
+    toggle-buffer)
+        toggle-buffer
+        ;;
+    capture-buffer)
+        pkill -SIGUSR1 -f gpu-screen-recorder > /dev/null
+        ;;
+esac
+signal-status $SIG_CLIP
