@@ -1,0 +1,62 @@
+[window]
+padding.x = 3
+padding.y = 3
+decorations = "Buttonless"
+opacity = 0.8
+blur = true
+
+[font]
+normal.family = "JetBrainsMono Nerd Font"
+size = 10
+
+[keyboard]
+bindings = [
+    { key = "F", mods = "Control|Shift", action = "ReceiveChar"}
+]
+
+# Default colors
+[colors.primary]
+background = '#1C1C1C'
+foreground = '#C0B18B'
+
+# These don’t exist in st, so we derive reasonable values
+dim_foreground    = '#978965'  # your brightWhite (slightly muted look)
+bright_foreground = '#C0B18B'
+
+# Cursor colors
+[colors.cursor]
+text   = '#1C1C1C'
+cursor = '#C0B18B'
+
+# Normal colors (0–7)
+[colors.normal]
+black   = '#4A3637'
+red     = '#D17B49'
+green   = '#7B8748'
+yellow  = '#AF865A'
+blue    = '#535C5C'
+magenta = '#775759'
+cyan    = '#6D715E'
+white   = '#C0B18B'
+
+# Bright colors (8–15)
+[colors.bright]
+black   = '#402E2E'
+red     = '#AC5D2F'
+green   = '#647035'
+yellow  = '#8F6840'
+blue    = '#444B4B'
+magenta = '#614445'
+cyan    = '#585C49'
+white   = '#978965'
+
+# Dim colors (manually derived ~75% brightness)
+[colors.dim]
+black   = '#38292A'
+red     = '#9E5C37'
+green   = '#5C6636'
+yellow  = '#826347'
+blue    = '#3E4545'
+magenta = '#5A4243'
+cyan    = '#525543'
+white   = '#8F8267'

@@ -2,16 +2,18 @@
 
 ### set-audio #####################################################################################
 # adjust the given mixer state/value.
-# Dependencies: amixer, notify-send
+# Dependencies: wpctl, notify-send
 ###################################################################################################
 
 source $(dirname $(readlink -e $0))/tool/helpers
 
 show() {
-    value=$(amixer get "$1" | grep -oP '\d+%' | head -n 1)
-    muted=$(amixer get "$1" | grep -oP '\[(on|off)\]' | head -n1)
+    # This is broken
+    value=$(wpctl get-volume "$1" | grep -oP '\d\.\d+' | head -n 1)
+    value=$(echo "$value * 100" | bc | cut -d'.' -f1)
+    muted=$(wpctl get-volume "$1" | grep -oP '\[MUTED\]' | head -n1)
     msg="Volume: $value"
-    [[ "$muted" == *"off"* ]] && msg="$msg (muted)"
+    [[ ! -z "$muted" ]] && msg="$msg (muted)"
     notify-send -r $N_SET_AUDIO "$1 Control" " ${msg}\n $(render-bar ${value::-1} 39)"
 }
 
@@ -20,16 +22,16 @@ if [ "$#" -lt 2 ]; then
     exit 1
 fi
 
-ELEMENT="$1"
+ELEMENT="@DEFAULT_AUDIO_SINK@"
 OPERATION="$2"
 
 toggle_mute() {
-    amixer set "$ELEMENT" toggle 1>/dev/null
+    wpctl set-mute "$ELEMENT" toggle 1>/dev/null
     show $ELEMENT
 }
 
 adjust_volume() {
-    amixer set "$ELEMENT" "$1" 1>/dev/null
+    wpctl set-volume "$ELEMENT" "$1" 1>/dev/null
     show $ELEMENT
 }
 
@@ -39,7 +41,7 @@ case "$OPERATION" in
         toggle_mute
         ;;
     *)
-        # Pass through to amixer for volume adjustments
+        # Pass through to wpctl for volume adjustments
         adjust_volume "$OPERATION"
         ;;
 esac
