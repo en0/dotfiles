@@ -8,13 +8,12 @@
 source $(dirname $(readlink -e $0))/tool/helpers
 
 show() {
-    # This is broken
     value=$(wpctl get-volume "$1" | grep -oP '\d\.\d+' | head -n 1)
     value=$(echo "$value * 100" | bc | cut -d'.' -f1)
     muted=$(wpctl get-volume "$1" | grep -oP '\[MUTED\]' | head -n1)
     msg="Volume: $value"
     [[ ! -z "$muted" ]] && msg="$msg (muted)"
-    notify-send -r $N_SET_AUDIO "$1 Control" " ${msg}\n $(render-bar ${value::-1} 39)"
+    notify-send -r $N_SET_AUDIO "${msg}" "$(render-bar ${value} 39)"
 }
 
 if [ "$#" -lt 2 ]; then
