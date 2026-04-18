@@ -1,10 +1,11 @@
 #!/bin/bash
 
-read -r vvol vstate < <(amixer sget Master | grep -P 'Front Left:' | awk '{print $5 $6}' | grep -Po '\w*' | xargs)
-read -r cvol mstate < <(amixer sget Capture | grep -P 'Front Left:' | awk '{print $5 $6}' | grep -Po '\w*' | xargs)
+read -r vlabel vvol vstate < <(wpctl get-volume @DEFAULT_AUDIO_SINK@)
+read -r mlabel mvol mstate < <(wpctl get-volume @DEFAULT_AUDIO_SOURCE@)
 
-[[ "${vstate}" == "on" ]] && vicon="󰕾" || vicon="󰖁"
-[[ "${mstate}" == "on" ]] && micon="󰍬" || micon="󰍭"
+[[ "${vstate}" != "[MUTED]" ]] && vicon="󰕾" || vicon="󰖁"
+[[ "${mstate}" != "[MUTED]" ]] && micon="󰍬" || micon="󰍭"
+[[ -z "${mlabel}" ]] && micon="!"
 
-#printf "%s %d%%  %s %d%%" $micon $cvol $vicon $vvol
-printf "%s%s %d%%" $micon $vicon $vvol
+vvol=$(echo "$vvol * 100" | bc)
+printf "${mlabel} %s%s %d%%" $micon $vicon $vvol

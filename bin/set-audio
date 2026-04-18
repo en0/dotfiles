@@ -21,7 +21,7 @@ if [ "$#" -lt 2 ]; then
     exit 1
 fi
 
-ELEMENT="@DEFAULT_AUDIO_SINK@"
+ELEMENT="$1"
 OPERATION="$2"
 
 toggle_mute() {
