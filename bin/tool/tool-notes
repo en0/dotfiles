@@ -12,10 +12,11 @@ NOTEDIR=$HOME/Documents/Notes
 mkdir -p $NOTEDIR
 
 # Search patterns - This is connected to the structure of the file.
-RG_ARGS="--no-column --no-heading --type md --pcre2 --color=always -o"
-BY_TAG="reload(rg $RG_ARGS '(?<=^- \*\*Tags\*\*:).*')"
-BY_CREATE="reload(rg $RG_ARGS '(?<=^- \*\*Created\*\*:).*')"
-BY_MODIF="reload(rg $RG_ARGS '(?<=^- \*\*Modified\*\*:).*')"
+RG_ARGS="--no-column --no-heading --type md --color=always"
+BY_TAG="reload(rg $RG_ARGS --pcre2 -o '(?<=^- \*\*Tags\*\*:).*')"
+BY_CREATE="reload(rg $RG_ARGS --pcre2 -o '(?<=^- \*\*Created\*\*:).*')"
+BY_MODIF="reload(rg $RG_ARGS --pcre2 -o '(?<=^- \*\*Modified\*\*:).*')"
+BY_TEXT="reload(rg $RG_ARGS --line-number '')"
 
 #[[ "$EDITOR" == "" ]] && EDITOR=/usr/bin/nvim
 EDITOR="$(which nvim)"
@@ -25,6 +26,23 @@ function launch-tool() {
        -g 150x50 \
        -c float \
        -e $0 execute
+}
+
+function update-tags() {
+    local file="$1"
+
+    local tags
+
+    tags=$( \
+        rg -o '#[A-Za-z0-9_-]+' "$file" | \
+        tr '[:upper:]' '[:lower:]' | \
+        sort -u | \
+        tr '\n' ' '
+    )
+
+    sed -i \
+        "s|^- \*\*Tags\*\*:.*|- **Tags**: ${tags% }|" \
+        "$file"
 }
 
 function exec-tool() {
@@ -38,13 +56,14 @@ function exec-tool() {
         ls -1 | \
         fzf --ansi \
             --prompt " Select a note> " \
-            --preview "f(){cat \${1%%:*}}; f {}" \
+            --preview 'f(){ file=$(echo "$1" | cut -d: -f1); match=$(echo "$1" | cut -d: -f2); if [[ "$match" =~ ^[0-9]+$ ]]; then start=$((match-10)); ((start < 1)) && start=1; end=$((match+20)); sed -n "${start},${end}p" "$file"; else cat "$file"; fi; }; f {}' \
             --preview-window="up,70%" \
             --header-first \
-            --header $'C-n: New Note\nC-t:Search by Tags, C-d:Search by Created Date, C-f:Search by Modified Date' \
+            --header $'C-n: New Note\nC-t:Search by Tags, C-d:Search by Created Date, C-m:Search by Modified Date, C-f:Full Text Search' \
             --bind "ctrl-d:$BY_CREATE+change-prompt(󰩉 Search by Created Date> )" \
-            --bind "ctrl-f:$BY_MODIF+change-prompt(󰩉 Search by Modified Date> )" \
+            --bind "ctrl-m:$BY_MODIF+change-prompt(󰩉 Search by Modified Date> )" \
             --bind "ctrl-t:$BY_TAG+change-prompt(󰩉 Search by Tags> )" \
+            --bind "ctrl-f:$BY_TEXT+change-prompt(󰍉 Full Text> )" \
             --bind "ctrl-n:become( echo '\$ New Note')+abort" \
             --bind "enter:accept" | awk -F: '{print $1}'
     )
@@ -72,9 +91,11 @@ function exec-tool() {
     # Do the edit bit.
     $EDITOR "$selected"
 
-    # If the digest changed, update the modified date
-    [[ "$digest" != "$(sha1sum "$selected")" ]] && \
+    # If the digest changed, update the modified date and re-extract tags
+    if [[ "$digest" != "$(sha1sum "$selected")" ]]; then
         sed -i "s/^- \*\*Modified\*\*: .*/- \*\*Modified\*\*: $(date +"%B %d, %Y")/" "$selected"
+        update-tags "$selected"
+    fi
 }
 
 case "$1" in

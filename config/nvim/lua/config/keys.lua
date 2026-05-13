@@ -6,11 +6,7 @@ vim.keymap.set('n', '<Leader>n', ":bp<CR>")
 vim.keymap.set('n', '<Leader>m', ":bn<CR>")
 vim.keymap.set('n', '<Leader>c', ":bd<CR>")
 
--- Window Nav
-vim.keymap.set('n', '<C-h>', "<C-w>h")
-vim.keymap.set('n', '<C-j>', "<C-w>j")
-vim.keymap.set('n', '<C-k>', "<C-w>k")
-vim.keymap.set('n', '<C-l>', "<C-w>l")
+-- Window Nav (handled by vim-tmux-navigator plugin)
 
 -- Clear search highlight
 vim.keymap.set('n', '<C-n>', ":nohl<CR>")

@@ -14,6 +14,8 @@ return {
             "rust_analyzer",
             "clangd",
             "basedpyright",
+            "golangci_lint_ls",
+            "gopls",
         }
 
         -- Add keybindings for each server
