@@ -1,0 +1,195 @@
+#!/bin/bash
+
+### tool-notes ########################################################################
+# A personal journaling tool.
+#
+# Features:
+# - One journal file per day
+# - Day rollover at 3 AM
+# - Automatic timestamp append blocks
+# - Automatic tag extraction / normalization
+# - FZF multi-modal searching
+#   - By date
+#   - By tags
+#   - Full text
+#
+# Dependencies:
+#   - ripgrep
+#   - fzf
+#   - nvim (or $EDITOR)
+########################################################################################
+
+source "$(dirname "$(readlink -e "$0")")/helpers"
+
+JOURNALDIR="$HOME/Documents/Journal"
+mkdir -p "$JOURNALDIR"
+
+EDITOR="${EDITOR:-nvim}"
+
+RG_ARGS="--no-column --no-heading --color=always"
+
+BY_TAG="reload(rg $RG_ARGS --pcre2 '^- \*\*Tags\*\*:.*')"
+BY_TEXT="reload(rg $RG_ARGS --line-number '')"
+BY_DATE="reload(find . -maxdepth 1 -type f | sed 's#^./##' | sort -r)"
+
+########################################################################################
+# Determine the current journal day.
+#
+# Before 3 AM counts as the previous day.
+########################################################################################
+function journal-date() {
+    local hour
+    hour=$(date +%H)
+
+    if ((10#$hour < 3)); then
+        date -d 'yesterday' '+%Y-%m-%d'
+    else
+        date '+%Y-%m-%d'
+    fi
+}
+
+########################################################################################
+# Human readable title.
+########################################################################################
+function journal-title() {
+    date -d "$1" '+%A %B %d, %Y'
+}
+
+########################################################################################
+# Create a journal if it does not already exist.
+########################################################################################
+function ensure-journal() {
+    local day="$1"
+    local file="$JOURNALDIR/$day.md"
+
+    [[ -f "$file" ]] && return
+
+    {
+        echo "# $(journal-title "$day")"
+        echo
+        echo "- **Created**: $(date '+%H:%M')"
+        echo "- **Tags**:"
+        echo
+        echo "---"
+        echo
+        echo "## $(date '+%H:%M')"
+        echo
+    } > "$file"
+}
+
+########################################################################################
+# Append a timestamp block to today's journal.
+########################################################################################
+function append-session-block() {
+    local file="$1"
+
+    local timestamp
+    timestamp=$(date '+%H:%M')
+
+    # Prevent duplicate empty timestamp sections.
+    tail -n 5 "$file" | grep -qE '^## [0-9]{2}:[0-9]{2}$' && return
+
+    {
+        echo
+        echo "## $timestamp"
+        echo
+    } >> "$file"
+}
+
+########################################################################################
+# Extract, normalize, sort, and rewrite tags.
+########################################################################################
+function update-tags() {
+    local file="$1"
+
+    local tags
+
+    tags=$( \
+        grep -v '^- \*\*Tags\*\*:' "$file" | \
+        rg -o '#[A-Za-z0-9_-]+' | \
+        tr '[:upper:]' '[:lower:]' | \
+        sort -u | \
+        tr '\n' ' '
+    )
+
+    sed -i \
+        "s|^- \*\*Tags\*\*:.*|- **Tags**: ${tags% }|" \
+        "$file"
+}
+
+########################################################################################
+# Open today's journal.
+########################################################################################
+function open-today() {
+    local day
+    local file
+
+    day="$(journal-date)"
+    file="$JOURNALDIR/$day.md"
+
+    ensure-journal "$day"
+
+    append-session-block "$file"
+
+    $EDITOR "$file"
+
+    update-tags "$file"
+}
+
+########################################################################################
+# FZF journal search.
+########################################################################################
+function search-journal() {
+    local selected
+
+    cd "$JOURNALDIR" || exit
+
+    selected=$(
+        find . -maxdepth 1 -type f | \
+        sed 's#^./##' | \
+        sort -r | \
+        fzf --ansi \
+            --prompt "󱞁 Journal> " \
+            --preview 'f(){ match=$(echo "$1" | cut -d: -f2); file=$(echo "$1" | cut -d: -f1); if [[ "$match" =~ ^[0-9]+$ ]]; then start=$((match-10)); ((start < 1)) && start=1; end=$((match+20)); sed -n "${start},${end}p" "$file"; else cat "$file"; fi; }; f {}' \
+            --preview-window='up,70%' \
+            --header-first \
+            --header $'C-d:Search by Date\nC-t:Search by Tags\nC-f:Search Full Text' \
+            --bind "ctrl-d:$BY_DATE+change-prompt(󰃭 Date> )" \
+            --bind "ctrl-t:$BY_TAG+change-prompt(󰓹 Tags> )" \
+            --bind "ctrl-f:$BY_TEXT+change-prompt(󰍉 Full Text> )" | \
+        awk -F: '{print $1}'
+    )
+
+    [[ "$selected" == "" ]] && exit
+
+    $EDITOR "$selected"
+
+    update-tags "$selected"
+}
+
+########################################################################################
+# Floating terminal launcher.
+########################################################################################
+function launch-tool() {
+    st -t "󱞁 Journal" \
+       -g 150x50 \
+       -c float \
+       -e "$0" search
+}
+
+########################################################################################
+# Entrypoint.
+########################################################################################
+case "$1" in
+new)
+    open-today
+    ;;
+
+search)
+    search-journal
+    ;;
+
+*)
+    launch-tool
+    ;;
+esac
