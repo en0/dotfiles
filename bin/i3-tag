@@ -1,0 +1,385 @@
+#!/home/ian/.local/python-venv/bin/python
+"""i3-tag: pin floating windows to multiple workspaces.
+
+Subcommands:
+    daemon  - Long-running process that moves tagged windows on workspace switch.
+    enter   - Record the focused window and show its current tag state via dunst.
+    toggle  - Toggle a workspace for the currently selected window.
+    dismiss - Close the dunst notification.
+"""
+
+import json
+import os
+import subprocess
+import sys
+import threading
+
+FIFO_PATH = os.path.expanduser("~/.cache/i3-tag.fifo")
+PID_PATH = os.path.expanduser("~/.cache/i3-tag.pid")
+DUNST_REPLACE_ID = 99442  # arbitrary stable ID for in-place notification updates
+
+
+# =============================================================================
+# Utility
+# =============================================================================
+
+
+def i3_msg(cmd):
+    """Send a command to i3 and return parsed JSON response."""
+    result = subprocess.run(
+        ["i3-msg", cmd], capture_output=True, text=True
+    )
+    try:
+        return json.loads(result.stdout)
+    except (json.JSONDecodeError, ValueError):
+        return None
+
+
+def i3_get_tree():
+    """Get the full i3 tree."""
+    result = subprocess.run(
+        ["i3-msg", "-t", "get_tree"], capture_output=True, text=True
+    )
+    return json.loads(result.stdout)
+
+
+def find_container(tree, con_id):
+    """Recursively find a container by con_id in the tree."""
+    if tree.get("id") == con_id:
+        return tree
+    for node in tree.get("nodes", []) + tree.get("floating_nodes", []):
+        found = find_container(node, con_id)
+        if found:
+            return found
+    return None
+
+
+def find_focused(tree):
+    """Find the focused container."""
+    if tree.get("focused"):
+        return tree
+    for node in tree.get("nodes", []) + tree.get("floating_nodes", []):
+        found = find_focused(node)
+        if found:
+            return found
+    return None
+
+
+def is_floating(container):
+    """Check if a container is floating."""
+    ft = container.get("floating", "")
+    return ft in ("user_on", "auto_on")
+
+
+def get_workspace_for_container(tree, con_id):
+    """Find which workspace a container lives on."""
+    return _find_ws_for_con(tree, con_id, None)
+
+
+def _find_ws_for_con(node, con_id, current_ws):
+    if node.get("type") == "workspace":
+        current_ws = node.get("name")
+    if node.get("id") == con_id:
+        return current_ws
+    for child in node.get("nodes", []) + node.get("floating_nodes", []):
+        result = _find_ws_for_con(child, con_id, current_ws)
+        if result is not None:
+            return result
+    return None
+
+
+def notify(summary, body="", timeout=0):
+    """Show/update the persistent dunst notification."""
+    cmd = [
+        "dunstify",
+        "-r", str(DUNST_REPLACE_ID),
+        "-t", str(timeout),
+        summary,
+    ]
+    if body:
+        cmd.append(body)
+    subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def notify_close():
+    """Close the persistent dunst notification."""
+    subprocess.Popen(
+        ["dunstify", "-C", str(DUNST_REPLACE_ID)],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+
+
+def format_tag_display(workspaces, all_workspaces=None):
+    """Format workspace tags for display in notification.
+
+    Shows something like: [1 _ 3 _ 5 6 _ _ _ _]
+    """
+    if all_workspaces is None:
+        all_workspaces = [f"{i}:{i}" for i in range(1, 11)]
+
+    parts = []
+    for ws in all_workspaces:
+        if ws in workspaces:
+            # Extract the short label (part after colon, or full name)
+            label = ws.split(":")[-1] if ":" in ws else ws
+            parts.append(label)
+        else:
+            parts.append("_")
+    return "[" + " ".join(parts) + "]"
+
+
+def write_to_fifo(message):
+    """Write a message to the daemon's FIFO."""
+    try:
+        fd = os.open(FIFO_PATH, os.O_WRONLY | os.O_NONBLOCK)
+        os.write(fd, (message + "\n").encode())
+        os.close(fd)
+    except OSError as e:
+        print(f"i3-tag: daemon not running? ({e})", file=sys.stderr)
+        sys.exit(1)
+
+
+# =============================================================================
+# Daemon
+# =============================================================================
+
+
+def cmd_daemon(force=False):
+    """Run the i3-tag daemon."""
+    import i3ipc
+    import signal
+
+    # Pidfile management
+    if os.path.exists(PID_PATH):
+        with open(PID_PATH, "r") as f:
+            old_pid = int(f.read().strip())
+        try:
+            os.kill(old_pid, 0)  # check if alive
+            if not force:
+                print(f"i3-tag: daemon already running (pid {old_pid}). Use --force to restart.", file=sys.stderr)
+                sys.exit(1)
+            os.kill(old_pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass  # stale pidfile
+
+    with open(PID_PATH, "w") as f:
+        f.write(str(os.getpid()))
+
+    def cleanup(*_):
+        try:
+            os.remove(PID_PATH)
+        except OSError:
+            pass
+        try:
+            os.remove(FIFO_PATH)
+        except OSError:
+            pass
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, cleanup)
+    signal.signal(signal.SIGINT, cleanup)
+
+    # State: {con_id: set(workspace_names)}
+    tags = {}
+    # The currently selected window for tagging (set by 'enter')
+    active_con_id = None
+
+    # Ensure FIFO exists
+    if os.path.exists(FIFO_PATH):
+        os.remove(FIFO_PATH)
+    os.mkfifo(FIFO_PATH)
+
+    def get_known_workspaces():
+        """Get list of configured workspace names."""
+        return [f"{i}:{i}" for i in range(1, 11)]
+
+    def handle_message(line):
+        nonlocal active_con_id, tags
+
+        parts = line.strip().split(None, 2)
+        if not parts:
+            return
+
+        cmd = parts[0]
+
+        if cmd == "enter":
+            if len(parts) < 2:
+                return
+            con_id = int(parts[1])
+            active_con_id = con_id
+
+            # Show current state
+            workspaces = tags.get(con_id, set())
+            display = format_tag_display(workspaces, get_known_workspaces())
+            notify("i3-tag", display)
+
+        elif cmd == "toggle":
+            if len(parts) < 3:
+                return
+            con_id = int(parts[1])
+            workspace = parts[2]
+
+            if con_id not in tags:
+                tags[con_id] = set()
+
+            if workspace in tags[con_id]:
+                tags[con_id].discard(workspace)
+            else:
+                tags[con_id].add(workspace)
+
+            # Clean up empty entries
+            if not tags[con_id]:
+                del tags[con_id]
+
+            # Update notification
+            workspaces = tags.get(con_id, set())
+            display = format_tag_display(workspaces, get_known_workspaces())
+            notify("i3-tag", display)
+
+        elif cmd == "dismiss":
+            notify_close()
+            active_con_id = None
+
+        elif cmd == "focus":
+            if len(parts) < 2:
+                return
+            workspace = parts[1] if len(parts) == 2 else parts[1]
+            # Rejoin remaining parts for workspace name
+            workspace = line.strip().split(None, 1)[1]
+
+            tree = i3_get_tree()
+
+            for con_id, workspaces in list(tags.items()):
+                if workspace not in workspaces:
+                    continue
+
+                container = find_container(tree, con_id)
+                if container is None:
+                    # Window gone, clean up
+                    del tags[con_id]
+                    continue
+
+                if not is_floating(container):
+                    continue
+
+                # Check if on scratchpad
+                con_ws = get_workspace_for_container(tree, con_id)
+                if con_ws == "__i3_scratch":
+                    continue
+
+                # Move it to the focused workspace
+                i3_msg(f'[con_id={con_id}] move to workspace "{workspace}"')
+
+        elif cmd == "close":
+            if len(parts) < 2:
+                return
+            con_id = int(parts[1])
+            tags.pop(con_id, None)
+            if active_con_id == con_id:
+                active_con_id = None
+
+    def i3_listener():
+        """Thread: subscribe to i3 events and write to FIFO."""
+        conn = i3ipc.Connection()
+        # Open FIFO for writing (keeps read end alive)
+        fifo_fd = os.open(FIFO_PATH, os.O_WRONLY)
+
+        def on_workspace_focus(conn, event):
+            ws_name = event.current.name
+            msg = f"focus {ws_name}\n"
+            try:
+                os.write(fifo_fd, msg.encode())
+            except OSError:
+                pass
+
+        def on_window_close(conn, event):
+            con_id = event.container.id
+            msg = f"close {con_id}\n"
+            try:
+                os.write(fifo_fd, msg.encode())
+            except OSError:
+                pass
+
+        conn.on("workspace::focus", on_workspace_focus)
+        conn.on("window::close", on_window_close)
+        conn.main()
+
+    # Start i3 listener thread
+    listener = threading.Thread(target=i3_listener, daemon=True)
+    listener.start()
+
+    # Main loop: read from FIFO
+    while True:
+        # Open for reading; blocks until a writer connects
+        with open(FIFO_PATH, "r") as fifo:
+            for line in fifo:
+                if line.strip():
+                    handle_message(line)
+
+
+# =============================================================================
+# Client subcommands
+# =============================================================================
+
+
+def cmd_enter():
+    """Record focused window and signal daemon."""
+    tree = i3_get_tree()
+    focused = find_focused(tree)
+    if focused is None:
+        print("i3-tag: no focused window", file=sys.stderr)
+        sys.exit(1)
+
+    con_id = focused["id"]
+    write_to_fifo(f"enter {con_id}")
+
+
+def cmd_toggle(workspace):
+    """Toggle a workspace tag for the active window."""
+    tree = i3_get_tree()
+    focused = find_focused(tree)
+    if focused is None:
+        print("i3-tag: no focused window", file=sys.stderr)
+        sys.exit(1)
+
+    con_id = focused["id"]
+    write_to_fifo(f"toggle {con_id} {workspace}")
+
+
+def cmd_dismiss():
+    """Dismiss the notification."""
+    write_to_fifo("dismiss")
+
+
+# =============================================================================
+# Main
+# =============================================================================
+
+
+def main():
+    if len(sys.argv) < 2:
+        print(__doc__, file=sys.stderr)
+        sys.exit(1)
+
+    subcmd = sys.argv[1]
+
+    if subcmd == "daemon":
+        force = "--force" in sys.argv[2:]
+        cmd_daemon(force=force)
+    elif subcmd == "enter":
+        cmd_enter()
+    elif subcmd == "toggle":
+        if len(sys.argv) < 3:
+            print("Usage: i3-tag toggle <workspace>", file=sys.stderr)
+            sys.exit(1)
+        cmd_toggle(sys.argv[2])
+    elif subcmd == "dismiss":
+        cmd_dismiss()
+    else:
+        print(f"Unknown subcommand: {subcmd}", file=sys.stderr)
+        print(__doc__, file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

@@ -23,7 +23,6 @@ return {
             hijack_cursor = false,
             update_cwd = false,
 
-            system_open = {cmd = nil, args = {}},
             view = {width = 50, side = "left"},
 
             diagnostics = {
