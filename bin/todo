@@ -34,6 +34,11 @@ ACTIVE_BUCKETS = ("today", "soon", "someday")
 DONE = "done"
 ALL_BUCKETS = (INBOX, *ACTIVE_BUCKETS, DONE)
 
+# What the list UI shows by default: the inbox first (unsorted, awaiting
+# routing or manual refinement), then the prioritized buckets. `done` is
+# terminal and excluded from the working list.
+DISPLAY_BUCKETS = (INBOX, *ACTIVE_BUCKETS)
+
 # Buckets whose items must carry a due date.
 DUE_REQUIRED = ("today", "soon")
 
@@ -333,7 +338,7 @@ def cmd_reap(args):
 
 
 def cmd_list(args):
-    buckets = (args.bucket,) if args.bucket else ACTIVE_BUCKETS
+    buckets = (args.bucket,) if args.bucket else DISPLAY_BUCKETS
     rows = collect_sorted(buckets)
     if args.json:
         out = [dict(bucket=b, **t) for b, t in rows]
