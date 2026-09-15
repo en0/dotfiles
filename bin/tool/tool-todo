@@ -1,134 +1,726 @@
-#!/bin/bash
+#!/usr/bin/env python3
+"""tool-todo — frictionless task capture and organization.
 
-#### tool-todo ####################################################################################
-# A todo list manager
-# Dependencies: fzf, dmenu, ripgrep, tool-qtodo
-###################################################################################################
+Sole writer for the JSONL bucket files under $TODO_DATA_DIR
+(default ~/.local/share/todo). Every mutation on every interface (capture modal,
+fzf UI, AI routing cron, future AI skill) MUST go through this CLI; that is the
+invariant the concurrency model depends on.
 
-source $(dirname $(readlink -e $0))/helpers
+Design: ~/Documents/Projects/todo-capture/DESIGN.md
+Standard library only. External runtime tools: fzf, st, notify-send (dunst).
+"""
 
-NAME=" To-do List"
-TODO="$HOME/.todo-list"
-touch $TODO
+import argparse
+import fcntl
+import json
+import os
+import subprocess
+import sys
+import uuid
+from contextlib import contextmanager
+from datetime import datetime, timedelta, time
+from pathlib import Path
 
-RG="rg --no-column --no-heading"
+# --- Layout -----------------------------------------------------------------
 
-# Filter Characters
-HIGH_PRIORITY="󱞾"
-LOW_PRIORITY="󱞤"
-ANY_PRIORITY="(󱞾|󱞤)"
-COMPLETED="󰱒"
-PENDING="󰄱"
-ALL_TASKS="(󰱒|󰄱)"
+DATA_DIR = Path(os.environ.get("TODO_DATA_DIR", Path.home() / ".local/share/todo"))
+LOCK_FILE = DATA_DIR / ".lock"
+AI_OFF_FILE = DATA_DIR / "ai-off"
+NOTIFIED_FILE = DATA_DIR / "notified.json"
 
-function launch-tool() {
-    st \
-        -g 100x30 \
-        -c float \
-        -t "$NAME" \
-        -e $0 execute $@
-}
+# Real buckets in display-priority order, plus the inbox and terminal buckets.
+INBOX = "new"
+ACTIVE_BUCKETS = ("today", "soon", "someday")
+DONE = "done"
+ALL_BUCKETS = (INBOX, *ACTIVE_BUCKETS, DONE)
 
-function exec-add() {
-    task="$(dmenu -p "${NAME}:" $@ </dev/null)"
-    [[ "$task" == "" ]] && exit 1
-    [[ $task == +* ]] && u="$HIGH_PRIORITY" || u="$LOW_PRIORITY"
-    echo "$u $PENDING ${task#+}" >> $TODO
+# Buckets whose items must carry a due date.
+DUE_REQUIRED = ("today", "soon")
 
-    uc=$(grep "$HIGH_PRIORITY $PENDING" $TODO | wc -l)
-    lc=$(grep "$LOW_PRIORITY $PENDING" $TODO | wc -l)
-    total_items=$((uc + lc))
-    notify-send -u low "${NAME}" \
-        "Added to todo.\nYou have a total of $total_items items in your to-do list, of which $uc are urgent."
-}
+REAP_DAYS = 7
+SOON_DEFAULT_DAYS = 3
 
-function exec-tool() {
+# --- Time helpers -----------------------------------------------------------
 
-    CTEMP=$(mktemp)
 
-    RE_LOW_DO="$RG '$LOW_PRIORITY $PENDING' $TODO"
-    RE_LOW="reload($RE_LOW_DO)+change-prompt( Low Priority> )"
+def now() -> datetime:
+    """Timezone-aware local now (offset from the system)."""
+    return datetime.now().astimezone()
 
-    RE_HIGH_DO="$RG '$HIGH_PRIORITY $PENDING' $TODO"
-    RE_HIGH="reload($RE_HIGH_DO)+change-prompt( High Priority> )"
 
-    RE_ALL_DO="$RG '' $TODO"
-    RE_ALL="reload($RE_ALL_DO)+change-prompt( All> )"
+def iso(dt: datetime) -> str:
+    return dt.isoformat()
 
-    RE_PENDING_DO="$RG '$PENDING' $TODO"
-    RE_PENDING="reload($RE_PENDING_DO)+change-prompt( Pending> )"
 
-    RE_COMPLETED_DO="$RG '$COMPLETED' $TODO"
-    RE_COMPLETED="reload($RE_COMPLETED_DO)+change-prompt( Completed> )"
+def parse_iso(s):
+    if not s:
+        return None
+    return datetime.fromisoformat(s)
 
-    EXEC_TOGGLE_COMPLETE="execute-silent(
-        f() {
-            [[ \${2} == $PENDING ]] && \
-                n=\$(echo \$@ | sed 's/$PENDING/$COMPLETED/g') || \
-                n=\$(echo \$@ | sed 's/$COMPLETED/$PENDING/g')
-            sed -i \"s/\$@/\$n/g\" $TODO
-        }; f {}
-    )"
 
-    EXEC_TOGGLE_URGENCY="execute-silent(
-        f() {
-            [[ \${1} == $LOW_PRIORITY ]] && \
-                n=\$(echo \$@ | sed 's/$LOW_PRIORITY/$HIGH_PRIORITY/g') || \
-                n=\$(echo \$@ | sed 's/$HIGH_PRIORITY/$LOW_PRIORITY/g')
-            sed -i \"s/\$@/\$n/g\" $TODO
-        }; f {}
-    )"
+def end_of_today() -> datetime:
+    n = now()
+    return datetime.combine(n.date(), time(23, 59, 59), tzinfo=n.tzinfo)
 
-    EXEC_NEW="execute-silent(
-        $(dirname $(readlink -e $0))/tool-todo add '$@'
-    )"
 
-    EXEC_DELETE="execute-silent(
-        l=\$(grep -n {} $TODO | awk -F: '{print \$1}')
-        sed -i \${l}d $TODO
-    )"
+def default_due_for(bucket: str):
+    """Bucket default due date when the caller supplies none."""
+    if bucket == "today":
+        return end_of_today()
+    if bucket == "soon":
+        return now() + timedelta(days=SOON_DEFAULT_DAYS)
+    return None  # someday: optional
 
-    BLIND_RELOAD="reload(
-        V=\$(cat $CTEMP)
-        case \"\$V\" in
-        RE_LOW)
-            $RE_LOW_DO ;;
-        RE_HIGH)
-            $RE_HIGH_DO ;;
-        RE_ALL)
-            $RE_ALL_DO ;;
-        RE_PENDING)
-            $RE_PENDING_DO ;;
-        RE_COMPLETED)
-            $RE_COMPLETED_DO ;;
-        esac
-    )"
 
-    echo RE_PENDING>$CTEMP
-    $RG "$PENDING" $TODO | \
-    fzf --ansi \
-        --prompt " Pending> " \
-        --header-first \
-        --header $'C-a:All, C-l:Low, C-h:High, C-p:Pending, C-o:Completed\nC-n:New, C-d:Delete, C-u:Urgency, C-m:Toggle' \
-        --bind "ctrl-l:execute-silent(echo RE_LOW>$CTEMP)+$RE_LOW" \
-        --bind "ctrl-h:execute-silent(echo RE_HIGH>$CTEMP)+$RE_HIGH" \
-        --bind "ctrl-a:execute-silent(echo RE_ALL>$CTEMP)+$RE_ALL" \
-        --bind "ctrl-p:execute-silent(echo RE_PENDING>$CTEMP)+$RE_PENDING" \
-        --bind "ctrl-o:execute-silent(echo RE_COMPLETED>$CTEMP)+$RE_COMPLETED" \
-        --bind "ctrl-u:$EXEC_TOGGLE_URGENCY+$BLIND_RELOAD" \
-        --bind "enter:$EXEC_TOGGLE_COMPLETE+$BLIND_RELOAD" \
-        --bind "ctrl-n:$EXEC_NEW+$BLIND_RELOAD" \
-        --bind "ctrl-d:$EXEC_DELETE+$BLIND_RELOAD"
-    rm -rf $CTEMP
-}
+# --- Storage ----------------------------------------------------------------
 
-case "$1" in
-execute)
-    shift
-    exec-tool "$@" ;;
-add)
-    shift
-    exec-add "$@" ;;
-*)
-    launch-tool "$@" ;;
-esac
+
+def bucket_path(bucket: str) -> Path:
+    return DATA_DIR / f"{bucket}.jsonl"
+
+
+def ensure_dirs():
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+
+@contextmanager
+def locked():
+    """Exclusive OS mutex around a read-modify-write critical section.
+
+    flock is advisory and kernel-released on process death. All writers take it;
+    the AI cron uses try_lock() instead so it can skip a busy window.
+    """
+    ensure_dirs()
+    fd = os.open(LOCK_FILE, os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        os.close(fd)
+
+
+@contextmanager
+def try_locked():
+    """Non-blocking variant. Yields True if the lock was acquired, else False."""
+    ensure_dirs()
+    fd = os.open(LOCK_FILE, os.O_CREAT | os.O_RDWR, 0o644)
+    got = False
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            got = True
+        except BlockingIOError:
+            got = False
+        yield got
+    finally:
+        if got:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        os.close(fd)
+
+
+def read_bucket(bucket: str) -> list:
+    """Read a bucket file into a list of task dicts. Missing file -> []."""
+    p = bucket_path(bucket)
+    if not p.exists():
+        return []
+    tasks = []
+    for line in p.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        tasks.append(json.loads(line))
+    return tasks
+
+
+def write_bucket(bucket: str, tasks: list):
+    """Atomically replace a bucket file (temp + os.replace)."""
+    p = bucket_path(bucket)
+    tmp = p.with_suffix(p.suffix + ".tmp")
+    with tmp.open("w", encoding="utf-8") as f:
+        for t in tasks:
+            f.write(json.dumps(t, ensure_ascii=False) + "\n")
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, p)
+
+
+def append_task(bucket: str, task: dict):
+    """True append for the capture path; still lock-guarded by the caller."""
+    ensure_dirs()
+    p = bucket_path(bucket)
+    with p.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(task, ensure_ascii=False) + "\n")
+
+
+def find_task(task_id: str):
+    """Locate a task by id across all buckets. Returns (bucket, task) or (None, None)."""
+    for b in ALL_BUCKETS:
+        for t in read_bucket(b):
+            if t.get("id") == task_id:
+                return b, t
+    return None, None
+
+
+def new_task(text: str, due=None) -> dict:
+    return {
+        "id": uuid.uuid4().hex[:12],
+        "captured": iso(now()),
+        "due": iso(due) if due else None,
+        "text": text,
+    }
+
+
+# --- Due-date parsing -------------------------------------------------------
+
+
+def parse_when(s):
+    """Parse a --due argument. Accepts ISO-8601 or 'today'/'tomorrow'/'+Nd'.
+
+    Deliberately small: rich natural-language parsing is the AI's job at routing
+    time. This handles the explicit cases a human or the router passes in.
+    """
+    if s is None:
+        return None
+    s = s.strip().lower()
+    if s in ("", "none", "clear"):
+        return None
+    if s == "today":
+        return end_of_today()
+    if s == "tomorrow":
+        return datetime.combine(
+            (now() + timedelta(days=1)).date(), time(23, 59, 59), tzinfo=now().tzinfo
+        )
+    if s.startswith("+") and s.endswith("d") and s[1:-1].isdigit():
+        return now() + timedelta(days=int(s[1:-1]))
+    return parse_iso(s)  # assume ISO; raises if malformed
+
+
+# --- Sorting / rendering ----------------------------------------------------
+
+
+def sort_key(bucket_index: int, task: dict):
+    """Display sort: bucket order, then due ascending; no-due sorts last."""
+    due = parse_iso(task.get("due"))
+    # datetime.max as a sentinel so no-due items trail within a bucket.
+    return (bucket_index, due or now().replace(year=9999))
+
+
+def collect_sorted(buckets):
+    """Yield (bucket, task) across the given buckets in display order."""
+    rows = []
+    for idx, b in enumerate(buckets):
+        for t in read_bucket(b):
+            rows.append((b, t, sort_key(idx, t)))
+    rows.sort(key=lambda r: r[2])
+    return [(b, t) for b, t, _ in rows]
+
+
+def is_overdue(task: dict) -> bool:
+    due = parse_iso(task.get("due"))
+    return due is not None and due < now()
+
+
+# --- Subcommands: writes ----------------------------------------------------
+
+
+def cmd_add(args):
+    text = args.text.strip()
+    if not text:
+        print("empty task, nothing added", file=sys.stderr)
+        return 1
+    with locked():
+        if args.bucket:
+            due = parse_when(args.due) if args.due else default_due_for(args.bucket)
+            if args.bucket in DUE_REQUIRED and due is None:
+                due = default_due_for(args.bucket)
+            append_task(args.bucket, new_task(text, due))
+        else:
+            # Capture path: straight into the inbox, no due date, no AI.
+            append_task(INBOX, new_task(text))
+    return 0
+
+
+def cmd_move(args):
+    with locked():
+        src, task = find_task(args.id)
+        if task is None:
+            print(f"no task with id {args.id}", file=sys.stderr)
+            return 1
+        dst = args.bucket
+        if dst not in (*ACTIVE_BUCKETS, INBOX):
+            print(f"cannot move to {dst}", file=sys.stderr)
+            return 1
+        due = parse_when(args.due) if args.due else parse_iso(task.get("due"))
+        if dst in DUE_REQUIRED and due is None:
+            due = default_due_for(dst)
+        task["due"] = iso(due) if due else None
+        _remove_and_write(src, args.id)
+        append_task(dst, task)
+    return 0
+
+
+def cmd_set_due(args):
+    with locked():
+        src, task = find_task(args.id)
+        if task is None:
+            print(f"no task with id {args.id}", file=sys.stderr)
+            return 1
+        due = parse_when(args.due)
+        if src in DUE_REQUIRED and due is None:
+            print(f"{src} items require a due date", file=sys.stderr)
+            return 1
+        task["due"] = iso(due) if due else None
+        _replace_in_bucket(src, task)
+    return 0
+
+
+def cmd_complete(args):
+    with locked():
+        src, task = find_task(args.id)
+        if task is None:
+            print(f"no task with id {args.id}", file=sys.stderr)
+            return 1
+        if src == DONE:
+            return 0
+        task["completed"] = iso(now())
+        task["from"] = src
+        _remove_and_write(src, args.id)
+        append_task(DONE, task)
+    return 0
+
+
+def cmd_delete(args):
+    with locked():
+        src, task = find_task(args.id)
+        if task is None:
+            print(f"no task with id {args.id}", file=sys.stderr)
+            return 1
+        _remove_and_write(src, args.id)
+    return 0
+
+
+def _remove_and_write(bucket: str, task_id: str):
+    tasks = [t for t in read_bucket(bucket) if t.get("id") != task_id]
+    write_bucket(bucket, tasks)
+
+
+def _replace_in_bucket(bucket: str, task: dict):
+    tasks = [task if t.get("id") == task["id"] else t for t in read_bucket(bucket)]
+    write_bucket(bucket, tasks)
+
+
+def cmd_reap(args):
+    """Delete completed items older than the retention window."""
+    cutoff = now() - timedelta(days=REAP_DAYS)
+    with locked():
+        kept = []
+        removed = 0
+        for t in read_bucket(DONE):
+            done_at = parse_iso(t.get("completed"))
+            if done_at and done_at < cutoff:
+                removed += 1
+            else:
+                kept.append(t)
+        if removed:
+            write_bucket(DONE, kept)
+    if args.verbose:
+        print(f"reaped {removed} completed item(s) older than {REAP_DAYS}d")
+    return 0
+
+
+# --- Subcommands: reads -----------------------------------------------------
+
+
+def cmd_list(args):
+    buckets = (args.bucket,) if args.bucket else ACTIVE_BUCKETS
+    rows = collect_sorted(buckets)
+    if args.json:
+        out = [dict(bucket=b, **t) for b, t in rows]
+        print(json.dumps(out, ensure_ascii=False))
+        return 0
+    for b, t in rows:
+        print(_render_row(b, t, refine=args.refine))
+    return 0
+
+
+def cmd_overdue(args):
+    rows = [
+        (b, t)
+        for b, t in collect_sorted(ACTIVE_BUCKETS)
+        if is_overdue(t)
+    ]
+    if args.json:
+        print(json.dumps([dict(bucket=b, **t) for b, t in rows], ensure_ascii=False))
+        return 0
+    for b, t in rows:
+        print(_render_row(b, t, refine=True))
+    return 0
+
+
+BUCKET_GLYPH = {"today": "󱕥", "soon": "󰥔", "someday": "󰃰", "new": "󰄱", "done": "󰱒"}
+
+
+def _render_row(bucket, task, refine=False):
+    """One display line. Leading hidden id lets the UI map a selection back.
+
+    Format: <id>\t<visible text>. The UI cuts on tab; the id column is what
+    every mutation passes back to the CLI.
+    """
+    tid = task["id"]
+    text = task["text"]
+    if not refine:
+        return f"{tid}\t{text}"
+    glyph = BUCKET_GLYPH.get(bucket, "")
+    due = parse_iso(task.get("due"))
+    if due:
+        overdue = "!" if due < now() else " "
+        due_s = due.strftime("%m-%d")
+    else:
+        overdue, due_s = " ", "     "
+    return f"{tid}\t{glyph}{overdue}{due_s}  {text}"
+
+
+# --- AI routing hook --------------------------------------------------------
+
+
+def cmd_route_new(args):
+    """Drain the inbox by handing each new item to the router.
+
+    Skips silently when the AI is disabled or when the lock is held (user is
+    mid-edit); a detached pass loses nothing by deferring to the next window.
+    The actual AI call is delegated to an external router command so token
+    usage / model choice stays outside this file. Set $TODO_ROUTER to the
+    command; it receives one JSON task on stdin and must print a JSON object
+    {"bucket": "...", "due": "<iso|null>"} on stdout.
+    """
+    if AI_OFF_FILE.exists():
+        if args.verbose:
+            print("ai routing disabled (ai-off present)")
+        return 0
+    router = os.environ.get("TODO_ROUTER")
+    if not router:
+        if args.verbose:
+            print("no $TODO_ROUTER configured; inbox left untouched")
+        return 0
+
+    with try_locked() as got:
+        if not got:
+            if args.verbose:
+                print("busy (lock held); skipping this window")
+            return 0
+        inbox = read_bucket(INBOX)
+        if not inbox:
+            return 0
+        remaining = []
+        for task in inbox:
+            decision = _run_router(router, task)
+            if decision is None:
+                remaining.append(task)  # leave for next pass on failure
+                continue
+            bucket = decision.get("bucket")
+            if bucket not in ACTIVE_BUCKETS:
+                remaining.append(task)
+                continue
+            due = parse_iso(decision.get("due")) or default_due_for(bucket)
+            if bucket in DUE_REQUIRED and due is None:
+                due = default_due_for(bucket)
+            task["due"] = iso(due) if due else None
+            append_task(bucket, task)
+        write_bucket(INBOX, remaining)
+    return 0
+
+
+def _run_router(router: str, task: dict):
+    try:
+        proc = subprocess.run(
+            router,
+            shell=True,
+            input=json.dumps(task, ensure_ascii=False),
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if proc.returncode != 0:
+            return None
+        return json.loads(proc.stdout)
+    except (subprocess.SubprocessError, json.JSONDecodeError):
+        return None
+
+
+# --- Overdue notifier -------------------------------------------------------
+
+
+def cmd_notify(args):
+    """Fire dunst notifications for overdue items. No AI. Notify-once/day."""
+    ensure_dirs()
+    state = {}
+    if NOTIFIED_FILE.exists():
+        try:
+            state = json.loads(NOTIFIED_FILE.read_text())
+        except json.JSONDecodeError:
+            state = {}
+    today_key = now().date().isoformat()
+    changed = False
+    for b, t in collect_sorted(ACTIVE_BUCKETS):
+        if not is_overdue(t):
+            continue
+        # Re-notify at most once per day per task.
+        if state.get(t["id"]) == today_key:
+            continue
+        _notify_send("Overdue task", t["text"])
+        state[t["id"]] = today_key
+        changed = True
+    # Drop state for tasks that are no longer overdue/present.
+    live = {t["id"] for _, t in collect_sorted(ACTIVE_BUCKETS) if is_overdue(t)}
+    for tid in list(state):
+        if tid not in live:
+            del state[tid]
+            changed = True
+    if changed:
+        NOTIFIED_FILE.write_text(json.dumps(state))
+    return 0
+
+
+def _notify_send(summary, body):
+    try:
+        subprocess.run(
+            ["notify-send", "-u", "normal", summary, body],
+            check=False,
+        )
+    except FileNotFoundError:
+        pass
+
+
+# --- UI: capture modal + fzf ------------------------------------------------
+
+
+def cmd_capture(args):
+    """Center-screen floating capture. Launches st running the prompt, unless
+    already inside it (execute)."""
+    if args.execute:
+        try:
+            text = input(" To-do: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            return 0
+        if text:
+            _self("add", text)
+        return 0
+    # Launch a floating st that re-invokes this command with --execute.
+    subprocess.run(
+        [
+            "st", "-t", " Capture Task", "-g", "60x1", "-c", "float",
+            "-e", _self_path(), "capture", "--execute",
+        ]
+    )
+    # Kick a reap opportunistically on capture close (cheap, lock-guarded).
+    _self("reap")
+    return 0
+
+
+def cmd_ui(args):
+    """fzf list UI. Launches a floating st unless already inside it (execute)."""
+    if not args.execute:
+        subprocess.run(
+            [
+                "st", "-t", " To-do List", "-g", "100x30", "-c", "float",
+                "-e", _self_path(), "ui", "--execute",
+            ]
+        )
+        return 0
+
+    _self("reap")  # opportunistic cleanup on open
+    self_path = _self_path()
+    header = (
+        "enter:done  C-d:delete  C-r:toggle refine\n"
+        "C-t:today  C-s:soon  C-y:someday  C-a:all(default)"
+    )
+    list_cmd = f"{self_path} list"
+    list_refine = f"{self_path} list --refine"
+    binds = [
+        f"enter:execute-silent({self_path} complete {{1}})+reload({list_cmd})",
+        f"ctrl-d:execute-silent({self_path} delete {{1}})+reload({list_cmd})",
+        f"ctrl-r:reload({list_refine})+change-prompt( Refine> )",
+        f"ctrl-t:execute-silent({self_path} move {{1}} today)+reload({list_refine})",
+        f"ctrl-s:execute-silent({self_path} move {{1}} soon)+reload({list_refine})",
+        f"ctrl-y:execute-silent({self_path} move {{1}} someday)+reload({list_refine})",
+        f"ctrl-a:reload({list_cmd})+change-prompt( To-do> )",
+    ]
+    fzf_cmd = ["fzf", "--ansi", "--with-nth", "2..", "--delimiter", "\t",
+               "--prompt", " To-do> ", "--header-first", "--header", header]
+    for b in binds:
+        fzf_cmd += ["--bind", b]
+    proc = subprocess.Popen(
+        fzf_cmd, stdin=subprocess.PIPE, text=True
+    )
+    out = subprocess.run([self_path, "list"], capture_output=True, text=True).stdout
+    proc.communicate(out)
+    return 0
+
+
+def _self_path() -> str:
+    return str(Path(__file__).resolve())
+
+
+def _self(*args):
+    subprocess.run([sys.executable, _self_path(), *args], check=False)
+
+
+# --- Kill switch ------------------------------------------------------------
+
+
+def cmd_ai(args):
+    ensure_dirs()
+    if args.state == "off":
+        AI_OFF_FILE.touch()
+        print("ai routing disabled")
+    elif args.state == "on":
+        AI_OFF_FILE.unlink(missing_ok=True)
+        print("ai routing enabled")
+    else:
+        print("disabled" if AI_OFF_FILE.exists() else "enabled")
+    return 0
+
+
+# --- Migration from the old ~/.todo-list glyph format ----------------------
+
+# Old format glyphs (Nerd Font). Entries were sometimes concatenated on one
+# physical line (the known bug), so split on the priority glyphs, not newlines.
+_OLD_HIGH = "\U000f17be"
+_OLD_LOW = "\U000f17a4"
+_OLD_DONE = "\U000f0c52"
+_OLD_PEND = "\U000f0131"
+
+
+def cmd_migrate(args):
+    src = Path(args.path).expanduser()
+    if not src.exists():
+        print(f"no such file: {src}", file=sys.stderr)
+        return 1
+    raw = src.read_text(encoding="utf-8")
+    entries = []
+    # Split on priority glyphs so concatenated entries separate correctly.
+    for prio in (_OLD_HIGH, _OLD_LOW):
+        raw = raw.replace(prio, "\x00" + prio)
+    for chunk in raw.split("\x00"):
+        chunk = chunk.strip()
+        if not chunk or chunk[0] not in (_OLD_HIGH, _OLD_LOW):
+            continue
+        high = chunk[0] == _OLD_HIGH
+        rest = chunk[1:].strip()
+        completed = rest.startswith(_OLD_DONE)
+        # Drop the leading state glyph (done or pending).
+        for g in (_OLD_DONE, _OLD_PEND):
+            if rest.startswith(g):
+                rest = rest[len(g):].strip()
+                break
+        # The known data bug: a task written without its glyph prefix ends up
+        # glued onto the previous entry, split by a newline. Recover any such
+        # trailing lines as separate untagged (inbox) entries.
+        lines = [ln.strip() for ln in rest.split("\n") if ln.strip()]
+        if lines:
+            entries.append((high, completed, lines[0]))
+            for extra in lines[1:]:
+                entries.append((False, False, extra))  # untagged -> inbox
+
+    with locked():
+        added = 0
+        for high, completed, text in entries:
+            if not text:
+                continue
+            if completed:
+                t = new_task(text)
+                t["completed"] = iso(now())
+                t["from"] = "someday"
+                append_task(DONE, t)
+            else:
+                # High-priority pending -> today (forced due); else -> inbox for
+                # the AI/user to route. Preserves the "don't lose it" intent.
+                if high:
+                    append_task("today", new_task(text, default_due_for("today")))
+                else:
+                    append_task(INBOX, new_task(text))
+            added += 1
+    print(f"migrated {added} item(s) from {src}")
+    return 0
+
+
+# --- CLI --------------------------------------------------------------------
+
+
+def build_parser():
+    p = argparse.ArgumentParser(prog="tool-todo", description=__doc__)
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    a = sub.add_parser("add", help="capture a task (default: into the inbox)")
+    a.add_argument("text")
+    a.add_argument("--bucket", choices=(*ACTIVE_BUCKETS, INBOX))
+    a.add_argument("--due")
+    a.set_defaults(func=cmd_add)
+
+    m = sub.add_parser("move", help="rebucket a task")
+    m.add_argument("id")
+    m.add_argument("bucket", choices=(*ACTIVE_BUCKETS, INBOX))
+    m.add_argument("--due")
+    m.set_defaults(func=cmd_move)
+
+    sd = sub.add_parser("set-due", help="set or clear a due date")
+    sd.add_argument("id")
+    sd.add_argument("due")
+    sd.set_defaults(func=cmd_set_due)
+
+    c = sub.add_parser("complete", help="mark a task done")
+    c.add_argument("id")
+    c.set_defaults(func=cmd_complete)
+
+    d = sub.add_parser("delete", help="delete a task")
+    d.add_argument("id")
+    d.set_defaults(func=cmd_delete)
+
+    li = sub.add_parser("list", help="list tasks in display order")
+    li.add_argument("--bucket", choices=ALL_BUCKETS)
+    li.add_argument("--refine", action="store_true")
+    li.add_argument("--json", action="store_true")
+    li.set_defaults(func=cmd_list)
+
+    ov = sub.add_parser("overdue", help="list overdue tasks")
+    ov.add_argument("--json", action="store_true")
+    ov.set_defaults(func=cmd_overdue)
+
+    rn = sub.add_parser("route-new", help="AI routing pass over the inbox")
+    rn.add_argument("-v", "--verbose", action="store_true")
+    rn.set_defaults(func=cmd_route_new)
+
+    rp = sub.add_parser("reap", help="delete old completed tasks")
+    rp.add_argument("-v", "--verbose", action="store_true")
+    rp.set_defaults(func=cmd_reap)
+
+    nt = sub.add_parser("notify", help="notify on overdue tasks (dunst)")
+    nt.set_defaults(func=cmd_notify)
+
+    cap = sub.add_parser("capture", help="center-screen capture modal")
+    cap.add_argument("--execute", action="store_true", help=argparse.SUPPRESS)
+    cap.set_defaults(func=cmd_capture)
+
+    ui = sub.add_parser("ui", help="fzf list UI")
+    ui.add_argument("--execute", action="store_true", help=argparse.SUPPRESS)
+    ui.set_defaults(func=cmd_ui)
+
+    ai = sub.add_parser("ai", help="toggle/query AI routing kill-switch")
+    ai.add_argument("state", nargs="?", choices=("on", "off"))
+    ai.set_defaults(func=cmd_ai)
+
+    mig = sub.add_parser("migrate", help="import the old ~/.todo-list glyph file")
+    mig.add_argument("path", nargs="?", default=str(Path.home() / ".todo-list"))
+    mig.set_defaults(func=cmd_migrate)
+
+    return p
+
+
+def main(argv=None):
+    args = build_parser().parse_args(argv)
+    return args.func(args) or 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
