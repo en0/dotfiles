@@ -1,0 +1,18 @@
+#!/bin/bash
+# Open screenshots in feh, newest first.
+
+dir="$HOME/Pictures/screenshots"
+
+if [[ ! -d "$dir" ]]; then
+    echo "Screenshot directory not found: $dir" >&2
+    exit 1
+fi
+
+mapfile -t files < <(ls -t "$dir"/*.{png,jpg,jpeg,gif,bmp,webp} 2>/dev/null)
+
+if [[ ${#files[@]} -eq 0 ]]; then
+    echo "No screenshots found in $dir" >&2
+    exit 1
+fi
+
+exec feh --class float -- "${files[@]}"
