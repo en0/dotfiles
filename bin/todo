@@ -345,7 +345,7 @@ def cmd_list(args):
         print(json.dumps(out, ensure_ascii=False))
         return 0
     for b, t in rows:
-        print(_render_row(b, t, refine=args.refine))
+        print(_render_row(b, t))
     return 0
 
 
@@ -359,23 +359,21 @@ def cmd_overdue(args):
         print(json.dumps([dict(bucket=b, **t) for b, t in rows], ensure_ascii=False))
         return 0
     for b, t in rows:
-        print(_render_row(b, t, refine=True))
+        print(_render_row(b, t))
     return 0
 
 
-BUCKET_GLYPH = {"today": "󱕥", "soon": "󰥔", "someday": "󰃰", "new": "󰄱", "done": "󰱒"}
+BUCKET_GLYPH = {"today": "󱕥", "soon": "󰥔", "someday": "󰃰", "new": "󰄱", "done": "󰄲"}
 
 
-def _render_row(bucket, task, refine=False):
-    """One display line. Leading hidden id lets the UI map a selection back.
+def _render_row(bucket, task):
+    """One display line: <id>\t<glyph><overdue><due>  <text>.
 
-    Format: <id>\t<visible text>. The UI cuts on tab; the id column is what
-    every mutation passes back to the CLI.
+    The UI cuts on the tab and hides the id column; the id is what every
+    mutation passes back to the CLI.
     """
     tid = task["id"]
     text = task["text"]
-    if not refine:
-        return f"{tid}\t{text}"
     glyph = BUCKET_GLYPH.get(bucket, "")
     due = parse_iso(task.get("due"))
     if due:
@@ -537,19 +535,17 @@ def cmd_ui(args):
     _self("reap")  # opportunistic cleanup on open
     self_path = _self_path()
     header = (
-        "enter:done  C-d:delete  C-r:toggle refine\n"
-        "C-t:today  C-s:soon  C-y:someday  C-a:all(default)"
+        "enter:done  C-d:delete  C-r:reload\n"
+        "C-t:today  C-s:soon  C-y:someday"
     )
     list_cmd = f"{self_path} list"
-    list_refine = f"{self_path} list --refine"
     binds = [
         f"enter:execute-silent({self_path} complete {{1}})+reload({list_cmd})",
         f"ctrl-d:execute-silent({self_path} delete {{1}})+reload({list_cmd})",
-        f"ctrl-r:reload({list_refine})+change-prompt( Refine> )",
-        f"ctrl-t:execute-silent({self_path} move {{1}} today)+reload({list_refine})",
-        f"ctrl-s:execute-silent({self_path} move {{1}} soon)+reload({list_refine})",
-        f"ctrl-y:execute-silent({self_path} move {{1}} someday)+reload({list_refine})",
-        f"ctrl-a:reload({list_cmd})+change-prompt( To-do> )",
+        f"ctrl-r:reload({list_cmd})",
+        f"ctrl-t:execute-silent({self_path} move {{1}} today)+reload({list_cmd})",
+        f"ctrl-s:execute-silent({self_path} move {{1}} soon)+reload({list_cmd})",
+        f"ctrl-y:execute-silent({self_path} move {{1}} someday)+reload({list_cmd})",
     ]
     fzf_cmd = ["fzf", "--ansi", "--with-nth", "2..", "--delimiter", "\t",
                "--prompt", " To-do> ", "--header-first", "--header", header]
@@ -684,7 +680,6 @@ def build_parser():
 
     li = sub.add_parser("list", help="list tasks in display order")
     li.add_argument("--bucket", choices=ALL_BUCKETS)
-    li.add_argument("--refine", action="store_true")
     li.add_argument("--json", action="store_true")
     li.set_defaults(func=cmd_list)
 
