@@ -1,0 +1,18 @@
+#!/bin/bash
+# nenostatus segment: tasks due today, with overdue flagged.
+#   󰃭 3        3 due today, none overdue
+#   󰃭 0 (!2)   nothing due today, 2 overdue
+# The overdue group is omitted entirely when there are none.
+
+TODO="$HOME/.bin/todo"
+
+count() { "$TODO" list --filter "$1" -q 2>/dev/null | grep -c .; }
+
+today=$(count today)
+overdue=$(count overdue)
+
+if [[ "$overdue" -gt 0 ]]; then
+    printf '󰃭 %d (!%d)' "$today" "$overdue"
+else
+    printf '󰃭 %d' "$today"
+fi
