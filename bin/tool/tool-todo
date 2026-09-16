@@ -63,8 +63,8 @@ exec_ui() {
 
     local -a fzf_args=(
         --ansi --with-nth 2.. --delimiter $'\t'
-        --layout reverse            # most urgent task sits just above the prompt
-        --prompt "$prompt" --header-first --header "$header"
+        --layout default            # prompt at the bottom of the screen
+        --prompt "$prompt" --header "$header"
     )
     local b
     for b in "${binds[@]}"; do fzf_args+=(--bind "$b"); done
