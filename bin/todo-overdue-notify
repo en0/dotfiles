@@ -1,0 +1,22 @@
+#!/bin/bash
+# todo-overdue-notify — fire a critical desktop notification listing overdue
+# todos. Meant to run from cron once a day; a critical notification does not
+# self-clear, so a single daily run needs no dedup state.
+#
+# No-op when nothing is overdue.
+
+set -uo pipefail
+
+# Cron has no desktop session; point notify-send at the running user's bus.
+export DISPLAY="${DISPLAY:-:0}"
+export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/user/$(id -u)/bus}"
+
+TODO="$HOME/.bin/todo"
+
+# One line per overdue task; text is field 3 (id|due|text).
+mapfile -t tasks < <("$TODO" list --filter overdue -q | cut -d'|' -f3-)
+
+[[ ${#tasks[@]} -eq 0 ]] && exit 0
+
+body=$(printf '• %s\n' "${tasks[@]}")
+notify-send -u critical " Overdue todos (${#tasks[@]})" "$body"

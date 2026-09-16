@@ -1,0 +1,19 @@
+#!/bin/bash
+# todo-categorize — assign due dates to newly-captured todos via the
+# todo-categorizer agent. Meant for cron on a short tumbling window.
+#
+# Cheap guard first: only invoke the model when the NEW bucket is non-empty, so
+# an idle window costs nothing.
+
+set -uo pipefail
+
+TODO="$HOME/.bin/todo"
+
+# Nothing captured since last run -> exit before spending a model call.
+[[ -z "$("$TODO" list --filter new -q)" ]] && exit 0
+
+exec /home/ian/.local/bin/kiro-cli chat \
+  --agent todo-categorizer \
+  --no-interactive \
+  --trust-all-tools \
+  "Categorize new todo items now."
