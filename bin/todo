@@ -7,7 +7,8 @@ fzf UI, AI routing cron, future AI skill) MUST go through this CLI; that is the
 invariant the concurrency model depends on.
 
 Design: ~/Documents/Projects/todo-capture/DESIGN.md
-Standard library only. External runtime tools: fzf, st, notify-send (dunst).
+Standard library only. This is the data CLI; the fzf/st UI lives in
+bin/tool/tool-todo (bash) and drives this via subcommands.
 """
 
 import argparse
@@ -548,120 +549,6 @@ def _notify_send(summary, body):
         pass
 
 
-# --- UI: capture modal + fzf ------------------------------------------------
-
-
-def cmd_capture(args):
-    """Center-screen floating capture. Launches st running the prompt, unless
-    already inside it (execute)."""
-    if args.execute:
-        try:
-            text = input(" To-do: ").strip()
-        except (EOFError, KeyboardInterrupt):
-            return 0
-        if text:
-            _self("add", text)
-        return 0
-    # Launch a floating st that re-invokes this command with --execute.
-    subprocess.run(
-        [
-            "st", "-t", " Capture Task", "-g", "60x1", "-c", "float",
-            "-e", _self_path(), "capture", "--execute",
-        ]
-    )
-    # Kick a reap opportunistically on capture close (cheap, lock-guarded).
-    _self("reap")
-    return 0
-
-
-def cmd_ui(args):
-    """fzf list UI with two modes.
-
-    view (default): read/pick. Fuzzy search; enter completes; filter keys scope
-    to a bucket. No accidental mutation of due dates.
-    refine: mutate. Set due (which picks the derived bucket), triage, uncomplete,
-    delete. C-r / C-v toggle between the modes in the same session.
-
-    Modes are implemented as two fzf configurations; the toggle key relaunches
-    this command in the other mode via fzf's `become`, so the whole binding set
-    and header swap cleanly.
-    """
-    if not args.execute:
-        subprocess.run(
-            [
-                "st", "-t", " To-do List", "-g", "100x30", "-c", "float",
-                "-e", _self_path(), "ui", "--execute", "--mode", args.mode,
-            ]
-        )
-        return 0
-
-    _self("reap")  # opportunistic cleanup on open
-    self = _self_path()
-    mode = args.mode
-
-    # Filter views: reload the list scoped to a bucket and relabel the prompt.
-    def flt(bucket, label):
-        return f"reload({self} list --bucket {bucket})+change-prompt({label}> )"
-
-    all_view = f"reload({self} list)+change-prompt( To-do> )"
-
-    if mode == "refine":
-        prompt = " Refine> "
-        header = (
-            "REFINE  C-v:view  |  C-t:due today  C-s:due +3d  C-y:someday\n"
-            "C-e:triage(new)  C-u:uncomplete  C-d:delete  C-x:show done"
-        )
-        binds = [
-            # set-due picks the derived bucket; someday = clear the due date.
-            f"ctrl-t:execute-silent({self} set-due {{1}} today)+reload({self} list)",
-            f"ctrl-s:execute-silent({self} set-due {{1}} +3d)+reload({self} list)",
-            f"ctrl-y:execute-silent({self} set-due {{1}} clear)+reload({self} list)",
-            f"ctrl-e:execute-silent({self} triage {{1}})+reload({self} list)",
-            f"ctrl-u:execute-silent({self} uncomplete {{1}})+reload({self} list --bucket done)",
-            f"ctrl-d:execute-silent({self} delete {{1}})+reload({self} list)",
-            f"ctrl-x:{flt('done', ' Done')}",
-            f"ctrl-v:become({self} ui --execute --mode view)",
-        ]
-    else:  # view
-        prompt = " To-do> "
-        header = (
-            "VIEW  C-r:refine  |  enter:complete\n"
-            "C-a:all  C-n:new  C-o:overdue  C-t:today  C-s:soon  C-y:someday  C-x:done"
-        )
-        binds = [
-            f"enter:execute-silent({self} complete {{1}})+reload({self} list)",
-            f"ctrl-r:become({self} ui --execute --mode refine)",
-            f"ctrl-a:{all_view}",
-            f"ctrl-n:{flt('new', ' New')}",
-            f"ctrl-o:{flt('overdue', ' Overdue')}",
-            f"ctrl-t:{flt('today', ' Today')}",
-            f"ctrl-s:{flt('soon', ' Soon')}",
-            f"ctrl-y:{flt('someday', ' Someday')}",
-            f"ctrl-x:{flt('done', ' Done')}",
-        ]
-
-    fzf_cmd = [
-        "fzf", "--ansi", "--with-nth", "2..", "--delimiter", "\t",
-        "--layout", "reverse",  # most important task sits just above the prompt
-        "--prompt", prompt, "--header-first", "--header", header,
-    ]
-    for b in binds:
-        fzf_cmd += ["--bind", b]
-
-    out = subprocess.run([self, "list"], capture_output=True, text=True).stdout
-    proc = subprocess.Popen(fzf_cmd, stdin=subprocess.PIPE, text=True)
-    proc.communicate(out)
-    return 0
-
-
-def _self_path() -> str:
-    return str(Path(__file__).resolve())
-
-
-def _self(*args):
-    subprocess.run([sys.executable, _self_path(), *args], check=False)
-
-
 # --- Kill switch ------------------------------------------------------------
 
 
@@ -796,15 +683,6 @@ def build_parser():
 
     nt = sub.add_parser("notify", help="notify on overdue tasks (dunst)")
     nt.set_defaults(func=cmd_notify)
-
-    cap = sub.add_parser("capture", help="center-screen capture modal")
-    cap.add_argument("--execute", action="store_true", help=argparse.SUPPRESS)
-    cap.set_defaults(func=cmd_capture)
-
-    ui = sub.add_parser("ui", help="fzf list UI")
-    ui.add_argument("--execute", action="store_true", help=argparse.SUPPRESS)
-    ui.add_argument("--mode", choices=("view", "refine"), default="view")
-    ui.set_defaults(func=cmd_ui)
 
     ai = sub.add_parser("ai", help="toggle/query AI routing kill-switch")
     ai.add_argument("state", nargs="?", choices=("on", "off"))

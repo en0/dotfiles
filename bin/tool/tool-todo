@@ -1,0 +1,88 @@
+#!/bin/bash
+
+#### tool-todo ####################################################################################
+# fzf UI + capture prompt for the `todo` data CLI (bin/todo).
+# The data CLI is the sole writer; this script only launches st and drives fzf.
+# Dependencies: fzf, st, todo (bin/todo)
+###################################################################################################
+
+TODO="$(command -v todo || echo "$HOME/.bin/todo")"
+
+# --- capture: a centered floating prompt that appends to NEW --------------------------------------
+exec_capture() {
+    local task
+    read -r -p " To-do: " task
+    [[ -n "$task" ]] && "$TODO" add "$task"
+}
+
+# --- fzf UI: two modes (view/refine) toggled in-session via become() ------------------------------
+# fzf has no real modes; a toggle key relaunches this script in the other mode, swapping the whole
+# keymap and header. Every mutation shells out to a `todo` subcommand then reloads from `todo list`.
+exec_ui() {
+    local mode="${1:-view}"
+    local self
+    self="$(readlink -e "$0")"
+
+    "$TODO" reap   # opportunistic cleanup on open
+
+    local list="$TODO list"
+    local prompt header
+    local -a binds
+
+    # filter <bucket> <label>  -> reload scoped to a derived bucket, relabel prompt
+    flt() { echo "reload($TODO list --bucket $1)+change-prompt($2> )"; }
+
+    if [[ "$mode" == "refine" ]]; then
+        prompt=" Refine> "
+        header=$'REFINE  C-v:view  |  C-t:due today  C-s:due +3d  C-y:someday\nC-e:triage(new)  C-u:uncomplete  C-d:delete  C-x:done'
+        binds=(
+            "ctrl-t:execute-silent($TODO set-due {1} today)+reload($list)"
+            "ctrl-s:execute-silent($TODO set-due {1} +3d)+reload($list)"
+            "ctrl-y:execute-silent($TODO set-due {1} clear)+reload($list)"
+            "ctrl-e:execute-silent($TODO triage {1})+reload($list)"
+            "ctrl-u:execute-silent($TODO uncomplete {1})+reload($TODO list --bucket done)"
+            "ctrl-d:execute-silent($TODO delete {1})+reload($list)"
+            "ctrl-x:$(flt done ' Done')"
+            "ctrl-v:become(bash $self --ui view)"
+        )
+    else
+        prompt=" To-do> "
+        header=$'VIEW  C-r:refine  |  enter:complete\nC-a:all  C-n:new  C-o:overdue  C-t:today  C-s:soon  C-y:someday  C-x:done'
+        binds=(
+            "enter:execute-silent($TODO complete {1})+reload($list)"
+            "ctrl-r:become(bash $self --ui refine)"
+            "ctrl-a:reload($list)+change-prompt( To-do> )"
+            "ctrl-n:$(flt new ' New')"
+            "ctrl-o:$(flt overdue ' Overdue')"
+            "ctrl-t:$(flt today ' Today')"
+            "ctrl-s:$(flt soon ' Soon')"
+            "ctrl-y:$(flt someday ' Someday')"
+            "ctrl-x:$(flt done ' Done')"
+        )
+    fi
+
+    local -a fzf_args=(
+        --ansi --with-nth 2.. --delimiter $'\t'
+        --layout reverse            # most urgent task sits just above the prompt
+        --prompt "$prompt" --header-first --header "$header"
+    )
+    local b
+    for b in "${binds[@]}"; do fzf_args+=(--bind "$b"); done
+
+    "$TODO" list | fzf "${fzf_args[@]}"
+}
+
+# --- entry ----------------------------------------------------------------------------------------
+case "$1" in
+    -i|--input)
+        # capture prompt in a small centered floating terminal
+        st -t " Capture Task" -g 60x1 -c float -e "$0" --exec-capture ;;
+    --exec-capture)
+        exec_capture ;;
+    --ui)
+        # relaunch target (from become) - runs fzf directly in the current terminal
+        exec_ui "$2" ;;
+    *)
+        # default: launch the fzf UI in a floating terminal, starting in view mode
+        st -t " To-do List" -g 100x30 -c float -e "$0" --ui view ;;
+esac
