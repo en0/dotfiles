@@ -28,22 +28,24 @@ LOCK_FILE = DATA_DIR / ".lock"
 AI_OFF_FILE = DATA_DIR / "ai-off"
 NOTIFIED_FILE = DATA_DIR / "notified.json"
 
-# Real buckets in display-priority order, plus the inbox and terminal buckets.
-INBOX = "new"
-ACTIVE_BUCKETS = ("today", "soon", "someday")
-DONE = "done"
-ALL_BUCKETS = (INBOX, *ACTIVE_BUCKETS, DONE)
+# Three stored states, each its own file. Everything else (today/soon/someday)
+# is NOT stored -- it is derived from an item's due date relative to now.
+NEW = "new"        # captured, not yet triaged (no due date semantics applied)
+ACTIVE = "active"  # triaged; displayed bucket derived from due
+DONE = "done"      # completed
+FILES = (NEW, ACTIVE, DONE)
 
-# What the list UI shows by default: the inbox first (unsorted, awaiting
-# routing or manual refinement), then the prioritized buckets. `done` is
-# terminal and excluded from the working list.
-DISPLAY_BUCKETS = (INBOX, *ACTIVE_BUCKETS)
+# Derived display buckets for ACTIVE items, in display-priority order.
+OVERDUE = "overdue"
+TODAY = "today"
+SOON = "soon"
+SOMEDAY = "someday"
 
-# Buckets whose items must carry a due date.
-DUE_REQUIRED = ("today", "soon")
+# Display order for the working list: new first, then derived active buckets.
+DERIVED_ORDER = (OVERDUE, TODAY, SOON, SOMEDAY)
 
+SOON_DAYS = 3
 REAP_DAYS = 7
-SOON_DEFAULT_DAYS = 3
 
 # --- Time helpers -----------------------------------------------------------
 
@@ -68,20 +70,38 @@ def end_of_today() -> datetime:
     return datetime.combine(n.date(), time(23, 59, 59), tzinfo=n.tzinfo)
 
 
-def default_due_for(bucket: str):
-    """Bucket default due date when the caller supplies none."""
-    if bucket == "today":
-        return end_of_today()
-    if bucket == "soon":
-        return now() + timedelta(days=SOON_DEFAULT_DAYS)
-    return None  # someday: optional
+def soon_horizon() -> datetime:
+    """End of the soon window: end of the day SOON_DAYS from today."""
+    n = now()
+    return datetime.combine(
+        (n.date() + timedelta(days=SOON_DAYS)), time(23, 59, 59), tzinfo=n.tzinfo
+    )
+
+
+def derive_bucket(task: dict) -> str:
+    """Compute the display bucket for an ACTIVE item from its due date.
+
+    No due date renders as someday. This recomputes on every read, so an item
+    due 'tomorrow' becomes 'today' when the day rolls over -- no mover job.
+    """
+    due = parse_iso(task.get("due"))
+    if due is None:
+        return SOMEDAY
+    n = now()
+    if due < n:
+        return OVERDUE
+    if due <= end_of_today():
+        return TODAY
+    if due <= soon_horizon():
+        return SOON
+    return SOMEDAY
 
 
 # --- Storage ----------------------------------------------------------------
 
 
-def bucket_path(bucket: str) -> Path:
-    return DATA_DIR / f"{bucket}.jsonl"
+def file_path(name: str) -> Path:
+    return DATA_DIR / f"{name}.jsonl"
 
 
 def ensure_dirs():
@@ -124,9 +144,9 @@ def try_locked():
         os.close(fd)
 
 
-def read_bucket(bucket: str) -> list:
-    """Read a bucket file into a list of task dicts. Missing file -> []."""
-    p = bucket_path(bucket)
+def read_file(name: str) -> list:
+    """Read a state file into a list of task dicts. Missing file -> []."""
+    p = file_path(name)
     if not p.exists():
         return []
     tasks = []
@@ -138,9 +158,9 @@ def read_bucket(bucket: str) -> list:
     return tasks
 
 
-def write_bucket(bucket: str, tasks: list):
-    """Atomically replace a bucket file (temp + os.replace)."""
-    p = bucket_path(bucket)
+def write_file(name: str, tasks: list):
+    """Atomically replace a state file (temp + os.replace)."""
+    p = file_path(name)
     tmp = p.with_suffix(p.suffix + ".tmp")
     with tmp.open("w", encoding="utf-8") as f:
         for t in tasks:
@@ -150,20 +170,20 @@ def write_bucket(bucket: str, tasks: list):
     os.replace(tmp, p)
 
 
-def append_task(bucket: str, task: dict):
+def append_file(name: str, task: dict):
     """True append for the capture path; still lock-guarded by the caller."""
     ensure_dirs()
-    p = bucket_path(bucket)
+    p = file_path(name)
     with p.open("a", encoding="utf-8") as f:
         f.write(json.dumps(task, ensure_ascii=False) + "\n")
 
 
 def find_task(task_id: str):
-    """Locate a task by id across all buckets. Returns (bucket, task) or (None, None)."""
-    for b in ALL_BUCKETS:
-        for t in read_bucket(b):
+    """Locate a task by id across all files. Returns (file, task) or (None, None)."""
+    for name in FILES:
+        for t in read_file(name):
             if t.get("id") == task_id:
-                return b, t
+                return name, t
     return None, None
 
 
@@ -176,14 +196,18 @@ def new_task(text: str, due=None) -> dict:
     }
 
 
+def _remove_from(name: str, task_id: str):
+    write_file(name, [t for t in read_file(name) if t.get("id") != task_id])
+
+
 # --- Due-date parsing -------------------------------------------------------
 
 
 def parse_when(s):
-    """Parse a --due argument. Accepts ISO-8601 or 'today'/'tomorrow'/'+Nd'.
+    """Parse a due argument. Accepts ISO-8601 or 'today'/'tomorrow'/'+Nd'.
 
-    Deliberately small: rich natural-language parsing is the AI's job at routing
-    time. This handles the explicit cases a human or the router passes in.
+    Rich natural-language parsing is the AI router's job; this handles the
+    explicit cases a human or the router passes in. Returns None for a clear.
     """
     if s is None:
         return None
@@ -204,23 +228,6 @@ def parse_when(s):
 # --- Sorting / rendering ----------------------------------------------------
 
 
-def sort_key(bucket_index: int, task: dict):
-    """Display sort: bucket order, then due ascending; no-due sorts last."""
-    due = parse_iso(task.get("due"))
-    # datetime.max as a sentinel so no-due items trail within a bucket.
-    return (bucket_index, due or now().replace(year=9999))
-
-
-def collect_sorted(buckets):
-    """Yield (bucket, task) across the given buckets in display order."""
-    rows = []
-    for idx, b in enumerate(buckets):
-        for t in read_bucket(b):
-            rows.append((b, t, sort_key(idx, t)))
-    rows.sort(key=lambda r: r[2])
-    return [(b, t) for b, t, _ in rows]
-
-
 def is_overdue(task: dict) -> bool:
     due = parse_iso(task.get("due"))
     return due is not None and due < now()
@@ -230,53 +237,65 @@ def is_overdue(task: dict) -> bool:
 
 
 def cmd_add(args):
+    """Capture a task. Default: into NEW with no due date, no AI.
+
+    With --due, the task is triaged immediately into ACTIVE (its displayed
+    bucket is derived from the date).
+    """
     text = args.text.strip()
     if not text:
         print("empty task, nothing added", file=sys.stderr)
         return 1
     with locked():
-        if args.bucket:
-            due = parse_when(args.due) if args.due else default_due_for(args.bucket)
-            if args.bucket in DUE_REQUIRED and due is None:
-                due = default_due_for(args.bucket)
-            append_task(args.bucket, new_task(text, due))
+        if args.due is not None:
+            append_file(ACTIVE, new_task(text, parse_when(args.due)))
         else:
-            # Capture path: straight into the inbox, no due date, no AI.
-            append_task(INBOX, new_task(text))
-    return 0
-
-
-def cmd_move(args):
-    with locked():
-        src, task = find_task(args.id)
-        if task is None:
-            print(f"no task with id {args.id}", file=sys.stderr)
-            return 1
-        dst = args.bucket
-        if dst not in (*ACTIVE_BUCKETS, INBOX):
-            print(f"cannot move to {dst}", file=sys.stderr)
-            return 1
-        due = parse_when(args.due) if args.due else parse_iso(task.get("due"))
-        if dst in DUE_REQUIRED and due is None:
-            due = default_due_for(dst)
-        task["due"] = iso(due) if due else None
-        _remove_and_write(src, args.id)
-        append_task(dst, task)
+            append_file(NEW, new_task(text))
     return 0
 
 
 def cmd_set_due(args):
+    """Set or clear a task's due date.
+
+    The due date is the primary control; the displayed bucket is derived from
+    it. Setting a due date on a NEW item triages it into ACTIVE. Clearing a due
+    date leaves the item in ACTIVE, where it renders as someday. There is no
+    separate 'move to bucket' -- you move an item by changing its date.
+    """
+    due = parse_when(args.due)
     with locked():
         src, task = find_task(args.id)
         if task is None:
             print(f"no task with id {args.id}", file=sys.stderr)
             return 1
-        due = parse_when(args.due)
-        if src in DUE_REQUIRED and due is None:
-            print(f"{src} items require a due date", file=sys.stderr)
+        if src == DONE:
+            print("cannot set due on a completed task; uncomplete it first",
+                  file=sys.stderr)
             return 1
         task["due"] = iso(due) if due else None
-        _replace_in_bucket(src, task)
+        if src == NEW:
+            # Any triage decision (even clearing) moves NEW -> ACTIVE.
+            _remove_from(NEW, args.id)
+            append_file(ACTIVE, task)
+        else:
+            _replace_in_active(task)
+    return 0
+
+
+def cmd_triage(args):
+    """Move a NEW item into ACTIVE without setting a due date (-> someday).
+
+    Convenience for 'this is a real task but has no deadline'. Idempotent for
+    items already in ACTIVE.
+    """
+    with locked():
+        src, task = find_task(args.id)
+        if task is None:
+            print(f"no task with id {args.id}", file=sys.stderr)
+            return 1
+        if src == NEW:
+            _remove_from(NEW, args.id)
+            append_file(ACTIVE, task)
     return 0
 
 
@@ -290,8 +309,24 @@ def cmd_complete(args):
             return 0
         task["completed"] = iso(now())
         task["from"] = src
-        _remove_and_write(src, args.id)
-        append_task(DONE, task)
+        _remove_from(src, args.id)
+        append_file(DONE, task)
+    return 0
+
+
+def cmd_uncomplete(args):
+    """Move a completed task back to ACTIVE (bucket re-derived from its due)."""
+    with locked():
+        src, task = find_task(args.id)
+        if task is None:
+            print(f"no task with id {args.id}", file=sys.stderr)
+            return 1
+        if src != DONE:
+            return 0
+        task.pop("completed", None)
+        task.pop("from", None)
+        _remove_from(DONE, args.id)
+        append_file(ACTIVE, task)
     return 0
 
 
@@ -301,34 +336,28 @@ def cmd_delete(args):
         if task is None:
             print(f"no task with id {args.id}", file=sys.stderr)
             return 1
-        _remove_and_write(src, args.id)
+        _remove_from(src, args.id)
     return 0
 
 
-def _remove_and_write(bucket: str, task_id: str):
-    tasks = [t for t in read_bucket(bucket) if t.get("id") != task_id]
-    write_bucket(bucket, tasks)
-
-
-def _replace_in_bucket(bucket: str, task: dict):
-    tasks = [task if t.get("id") == task["id"] else t for t in read_bucket(bucket)]
-    write_bucket(bucket, tasks)
+def _replace_in_active(task: dict):
+    tasks = [task if t.get("id") == task["id"] else t for t in read_file(ACTIVE)]
+    write_file(ACTIVE, tasks)
 
 
 def cmd_reap(args):
     """Delete completed items older than the retention window."""
     cutoff = now() - timedelta(days=REAP_DAYS)
     with locked():
-        kept = []
-        removed = 0
-        for t in read_bucket(DONE):
+        kept, removed = [], 0
+        for t in read_file(DONE):
             done_at = parse_iso(t.get("completed"))
             if done_at and done_at < cutoff:
                 removed += 1
             else:
                 kept.append(t)
         if removed:
-            write_bucket(DONE, kept)
+            write_file(DONE, kept)
     if args.verbose:
         print(f"reaped {removed} completed item(s) older than {REAP_DAYS}d")
     return 0
@@ -336,25 +365,39 @@ def cmd_reap(args):
 
 # --- Subcommands: reads -----------------------------------------------------
 
+# Sort weight for derived buckets so the working list orders new -> overdue ->
+# today -> soon -> someday.
+_ROW_ORDER = {NEW: 0, OVERDUE: 1, TODAY: 2, SOON: 3, SOMEDAY: 4}
+
+
+def collect_rows(filter_bucket=None):
+    """Return (display_bucket, task) rows in display order.
+
+    NEW items carry the display bucket 'new'. ACTIVE items get a derived
+    bucket. filter_bucket, if given, restricts to one display bucket
+    (new/overdue/today/soon/someday/done).
+    """
+    rows = []
+    for t in read_file(NEW):
+        rows.append((NEW, t))
+    for t in read_file(ACTIVE):
+        rows.append((derive_bucket(t), t))
+    if filter_bucket == DONE:
+        rows = [(DONE, t) for t in read_file(DONE)]
+    elif filter_bucket:
+        rows = [(b, t) for b, t in rows if b == filter_bucket]
+
+    def key(row):
+        b, t = row
+        due = parse_iso(t.get("due"))
+        return (_ROW_ORDER.get(b, 9), due or now().replace(year=9999))
+
+    rows.sort(key=key)
+    return rows
+
 
 def cmd_list(args):
-    buckets = (args.bucket,) if args.bucket else DISPLAY_BUCKETS
-    rows = collect_sorted(buckets)
-    if args.json:
-        out = [dict(bucket=b, **t) for b, t in rows]
-        print(json.dumps(out, ensure_ascii=False))
-        return 0
-    for b, t in rows:
-        print(_render_row(b, t))
-    return 0
-
-
-def cmd_overdue(args):
-    rows = [
-        (b, t)
-        for b, t in collect_sorted(ACTIVE_BUCKETS)
-        if is_overdue(t)
-    ]
+    rows = collect_rows(filter_bucket=args.bucket)
     if args.json:
         print(json.dumps([dict(bucket=b, **t) for b, t in rows], ensure_ascii=False))
         return 0
@@ -363,7 +406,24 @@ def cmd_overdue(args):
     return 0
 
 
-BUCKET_GLYPH = {"today": "󱕥", "soon": "󰥔", "someday": "󰃰", "new": "󰄱", "done": "󰄲"}
+def cmd_overdue(args):
+    rows = collect_rows(filter_bucket=OVERDUE)
+    if args.json:
+        print(json.dumps([dict(bucket=b, **t) for b, t in rows], ensure_ascii=False))
+        return 0
+    for b, t in rows:
+        print(_render_row(b, t))
+    return 0
+
+
+BUCKET_GLYPH = {
+    NEW: "󰎃",
+    OVERDUE: "󰄱",
+    TODAY: "󱕥",
+    SOON: "󰥔",
+    SOMEDAY: "󰃰",
+    DONE: "󰄲",
+}
 
 
 def _render_row(bucket, task):
@@ -388,14 +448,14 @@ def _render_row(bucket, task):
 
 
 def cmd_route_new(args):
-    """Drain the inbox by handing each new item to the router.
+    """Drain NEW by asking the router for a due date per item, moving to ACTIVE.
 
-    Skips silently when the AI is disabled or when the lock is held (user is
-    mid-edit); a detached pass loses nothing by deferring to the next window.
-    The actual AI call is delegated to an external router command so token
-    usage / model choice stays outside this file. Set $TODO_ROUTER to the
-    command; it receives one JSON task on stdin and must print a JSON object
-    {"bucket": "...", "due": "<iso|null>"} on stdout.
+    The router only decides a due date now; the displayed bucket is derived
+    from that date, so the router no longer picks a bucket. Skips silently when
+    AI is disabled or the lock is held (user mid-edit); a detached pass loses
+    nothing by deferring. The AI call is delegated to $TODO_ROUTER, which
+    receives one JSON task on stdin and prints {"due": "<iso|null>"} on stdout.
+    A null due is valid: the item lands in ACTIVE as someday.
     """
     if AI_OFF_FILE.exists():
         if args.verbose:
@@ -404,7 +464,7 @@ def cmd_route_new(args):
     router = os.environ.get("TODO_ROUTER")
     if not router:
         if args.verbose:
-            print("no $TODO_ROUTER configured; inbox left untouched")
+            print("no $TODO_ROUTER configured; NEW left untouched")
         return 0
 
     with try_locked() as got:
@@ -412,7 +472,7 @@ def cmd_route_new(args):
             if args.verbose:
                 print("busy (lock held); skipping this window")
             return 0
-        inbox = read_bucket(INBOX)
+        inbox = read_file(NEW)
         if not inbox:
             return 0
         remaining = []
@@ -421,16 +481,10 @@ def cmd_route_new(args):
             if decision is None:
                 remaining.append(task)  # leave for next pass on failure
                 continue
-            bucket = decision.get("bucket")
-            if bucket not in ACTIVE_BUCKETS:
-                remaining.append(task)
-                continue
-            due = parse_iso(decision.get("due")) or default_due_for(bucket)
-            if bucket in DUE_REQUIRED and due is None:
-                due = default_due_for(bucket)
+            due = parse_iso(decision.get("due")) if decision.get("due") else None
             task["due"] = iso(due) if due else None
-            append_task(bucket, task)
-        write_bucket(INBOX, remaining)
+            append_file(ACTIVE, task)
+        write_file(NEW, remaining)
     return 0
 
 
@@ -465,9 +519,8 @@ def cmd_notify(args):
             state = {}
     today_key = now().date().isoformat()
     changed = False
-    for b, t in collect_sorted(ACTIVE_BUCKETS):
-        if not is_overdue(t):
-            continue
+    overdue_rows = collect_rows(filter_bucket=OVERDUE)
+    for _, t in overdue_rows:
         # Re-notify at most once per day per task.
         if state.get(t["id"]) == today_key:
             continue
@@ -475,7 +528,7 @@ def cmd_notify(args):
         state[t["id"]] = today_key
         changed = True
     # Drop state for tasks that are no longer overdue/present.
-    live = {t["id"] for _, t in collect_sorted(ACTIVE_BUCKETS) if is_overdue(t)}
+    live = {t["id"] for _, t in overdue_rows}
     for tid in list(state):
         if tid not in live:
             del state[tid]
@@ -522,39 +575,81 @@ def cmd_capture(args):
 
 
 def cmd_ui(args):
-    """fzf list UI. Launches a floating st unless already inside it (execute)."""
+    """fzf list UI with two modes.
+
+    view (default): read/pick. Fuzzy search; enter completes; filter keys scope
+    to a bucket. No accidental mutation of due dates.
+    refine: mutate. Set due (which picks the derived bucket), triage, uncomplete,
+    delete. C-r / C-v toggle between the modes in the same session.
+
+    Modes are implemented as two fzf configurations; the toggle key relaunches
+    this command in the other mode via fzf's `become`, so the whole binding set
+    and header swap cleanly.
+    """
     if not args.execute:
         subprocess.run(
             [
                 "st", "-t", " To-do List", "-g", "100x30", "-c", "float",
-                "-e", _self_path(), "ui", "--execute",
+                "-e", _self_path(), "ui", "--execute", "--mode", args.mode,
             ]
         )
         return 0
 
     _self("reap")  # opportunistic cleanup on open
-    self_path = _self_path()
-    header = (
-        "enter:done  C-d:delete  C-r:reload\n"
-        "C-t:today  C-s:soon  C-y:someday"
-    )
-    list_cmd = f"{self_path} list"
-    binds = [
-        f"enter:execute-silent({self_path} complete {{1}})+reload({list_cmd})",
-        f"ctrl-d:execute-silent({self_path} delete {{1}})+reload({list_cmd})",
-        f"ctrl-r:reload({list_cmd})",
-        f"ctrl-t:execute-silent({self_path} move {{1}} today)+reload({list_cmd})",
-        f"ctrl-s:execute-silent({self_path} move {{1}} soon)+reload({list_cmd})",
-        f"ctrl-y:execute-silent({self_path} move {{1}} someday)+reload({list_cmd})",
+    self = _self_path()
+    mode = args.mode
+
+    # Filter views: reload the list scoped to a bucket and relabel the prompt.
+    def flt(bucket, label):
+        return f"reload({self} list --bucket {bucket})+change-prompt({label}> )"
+
+    all_view = f"reload({self} list)+change-prompt( To-do> )"
+
+    if mode == "refine":
+        prompt = " Refine> "
+        header = (
+            "REFINE  C-v:view  |  C-t:due today  C-s:due +3d  C-y:someday\n"
+            "C-e:triage(new)  C-u:uncomplete  C-d:delete  C-x:show done"
+        )
+        binds = [
+            # set-due picks the derived bucket; someday = clear the due date.
+            f"ctrl-t:execute-silent({self} set-due {{1}} today)+reload({self} list)",
+            f"ctrl-s:execute-silent({self} set-due {{1}} +3d)+reload({self} list)",
+            f"ctrl-y:execute-silent({self} set-due {{1}} clear)+reload({self} list)",
+            f"ctrl-e:execute-silent({self} triage {{1}})+reload({self} list)",
+            f"ctrl-u:execute-silent({self} uncomplete {{1}})+reload({self} list --bucket done)",
+            f"ctrl-d:execute-silent({self} delete {{1}})+reload({self} list)",
+            f"ctrl-x:{flt('done', ' Done')}",
+            f"ctrl-v:become({self} ui --execute --mode view)",
+        ]
+    else:  # view
+        prompt = " To-do> "
+        header = (
+            "VIEW  C-r:refine  |  enter:complete\n"
+            "C-a:all  C-n:new  C-o:overdue  C-t:today  C-s:soon  C-y:someday  C-x:done"
+        )
+        binds = [
+            f"enter:execute-silent({self} complete {{1}})+reload({self} list)",
+            f"ctrl-r:become({self} ui --execute --mode refine)",
+            f"ctrl-a:{all_view}",
+            f"ctrl-n:{flt('new', ' New')}",
+            f"ctrl-o:{flt('overdue', ' Overdue')}",
+            f"ctrl-t:{flt('today', ' Today')}",
+            f"ctrl-s:{flt('soon', ' Soon')}",
+            f"ctrl-y:{flt('someday', ' Someday')}",
+            f"ctrl-x:{flt('done', ' Done')}",
+        ]
+
+    fzf_cmd = [
+        "fzf", "--ansi", "--with-nth", "2..", "--delimiter", "\t",
+        "--layout", "reverse",  # most important task sits just above the prompt
+        "--prompt", prompt, "--header-first", "--header", header,
     ]
-    fzf_cmd = ["fzf", "--ansi", "--with-nth", "2..", "--delimiter", "\t",
-               "--prompt", " To-do> ", "--header-first", "--header", header]
     for b in binds:
         fzf_cmd += ["--bind", b]
-    proc = subprocess.Popen(
-        fzf_cmd, stdin=subprocess.PIPE, text=True
-    )
-    out = subprocess.run([self_path, "list"], capture_output=True, text=True).stdout
+
+    out = subprocess.run([self, "list"], capture_output=True, text=True).stdout
+    proc = subprocess.Popen(fzf_cmd, stdin=subprocess.PIPE, text=True)
     proc.communicate(out)
     return 0
 
@@ -632,15 +727,14 @@ def cmd_migrate(args):
             if completed:
                 t = new_task(text)
                 t["completed"] = iso(now())
-                t["from"] = "someday"
-                append_task(DONE, t)
+                t["from"] = ACTIVE
+                append_file(DONE, t)
+            elif high:
+                # High-priority pending -> ACTIVE due today (renders as today).
+                append_file(ACTIVE, new_task(text, end_of_today()))
             else:
-                # High-priority pending -> today (forced due); else -> inbox for
-                # the AI/user to route. Preserves the "don't lose it" intent.
-                if high:
-                    append_task("today", new_task(text, default_due_for("today")))
-                else:
-                    append_task(INBOX, new_task(text))
+                # Everything else -> NEW, to be triaged. Preserves "don't lose it".
+                append_file(NEW, new_task(text))
             added += 1
     print(f"migrated {added} item(s) from {src}")
     return 0
@@ -653,33 +747,38 @@ def build_parser():
     p = argparse.ArgumentParser(prog="todo", description=__doc__)
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    a = sub.add_parser("add", help="capture a task (default: into the inbox)")
+    a = sub.add_parser("add", help="capture a task (default: into NEW)")
     a.add_argument("text")
-    a.add_argument("--bucket", choices=(*ACTIVE_BUCKETS, INBOX))
-    a.add_argument("--due")
+    a.add_argument("--due", help="triage straight to ACTIVE with this due date")
     a.set_defaults(func=cmd_add)
 
-    m = sub.add_parser("move", help="rebucket a task")
-    m.add_argument("id")
-    m.add_argument("bucket", choices=(*ACTIVE_BUCKETS, INBOX))
-    m.add_argument("--due")
-    m.set_defaults(func=cmd_move)
-
-    sd = sub.add_parser("set-due", help="set or clear a due date")
+    sd = sub.add_parser(
+        "set-due", help="set/clear due date (moves NEW->ACTIVE; bucket derived)"
+    )
     sd.add_argument("id")
-    sd.add_argument("due")
+    sd.add_argument("due", help="ISO date, 'today', 'tomorrow', '+Nd', or 'clear'")
     sd.set_defaults(func=cmd_set_due)
+
+    tr = sub.add_parser("triage", help="move a NEW item to ACTIVE (no due -> someday)")
+    tr.add_argument("id")
+    tr.set_defaults(func=cmd_triage)
 
     c = sub.add_parser("complete", help="mark a task done")
     c.add_argument("id")
     c.set_defaults(func=cmd_complete)
+
+    uc = sub.add_parser("uncomplete", help="move a completed task back to ACTIVE")
+    uc.add_argument("id")
+    uc.set_defaults(func=cmd_uncomplete)
 
     d = sub.add_parser("delete", help="delete a task")
     d.add_argument("id")
     d.set_defaults(func=cmd_delete)
 
     li = sub.add_parser("list", help="list tasks in display order")
-    li.add_argument("--bucket", choices=ALL_BUCKETS)
+    li.add_argument(
+        "--bucket", choices=(NEW, OVERDUE, TODAY, SOON, SOMEDAY, DONE)
+    )
     li.add_argument("--json", action="store_true")
     li.set_defaults(func=cmd_list)
 
@@ -687,7 +786,7 @@ def build_parser():
     ov.add_argument("--json", action="store_true")
     ov.set_defaults(func=cmd_overdue)
 
-    rn = sub.add_parser("route-new", help="AI routing pass over the inbox")
+    rn = sub.add_parser("route-new", help="AI routing pass over NEW")
     rn.add_argument("-v", "--verbose", action="store_true")
     rn.set_defaults(func=cmd_route_new)
 
@@ -704,6 +803,7 @@ def build_parser():
 
     ui = sub.add_parser("ui", help="fzf list UI")
     ui.add_argument("--execute", action="store_true", help=argparse.SUPPRESS)
+    ui.add_argument("--mode", choices=("view", "refine"), default="view")
     ui.set_defaults(func=cmd_ui)
 
     ai = sub.add_parser("ai", help="toggle/query AI routing kill-switch")
