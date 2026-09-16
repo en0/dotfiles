@@ -1,421 +1,61 @@
 #!/usr/bin/env python3
 """todo — frictionless task capture and organization.
 
-Sole writer for the JSONL bucket files under $TODO_DATA_DIR
-(default ~/.local/share/todo). Every mutation on every interface (capture modal,
-fzf UI, AI routing cron, future AI skill) MUST go through this CLI; that is the
-invariant the concurrency model depends on.
+Sole writer for the JSONL state files under ``$TODO_DATA_DIR``
+(default ``~/.local/share/todo``). Every mutation on every interface (capture
+modal, fzf UI, any other caller) MUST go through this CLI; that is the invariant
+the concurrency model depends on.
 
 Design: ~/Documents/Projects/todo-capture/DESIGN.md
 Standard library only. This is the data CLI; the fzf/st UI lives in
-bin/tool/tool-todo (bash) and drives this via subcommands.
+``bin/tool/tool-todo`` (bash) and drives it via subcommands.
 """
+
+from __future__ import annotations
 
 import argparse
 import fcntl
 import json
 import os
-import subprocess
 import sys
+import time as clock
 import uuid
 from contextlib import contextmanager
-from datetime import datetime, timedelta, time
+from datetime import datetime, time, timedelta
 from pathlib import Path
+from typing import Any, Iterator, Optional
+
+Task = dict[str, Any]
 
 # --- Layout -----------------------------------------------------------------
 
 DATA_DIR = Path(os.environ.get("TODO_DATA_DIR", Path.home() / ".local/share/todo"))
-LOCK_FILE = DATA_DIR / ".lock"
-AI_OFF_FILE = DATA_DIR / "ai-off"
-NOTIFIED_FILE = DATA_DIR / "notified.json"
+LOCK_FILE = DATA_DIR / ".lock"            # flock target guarding read-modify-write
+SESSION_FILE = DATA_DIR / ".session-lock"  # advisory cross-command lock (holds a hash)
 
-# Three stored states, each its own file. Everything else (today/soon/someday)
-# is NOT stored -- it is derived from an item's due date relative to now.
-NEW = "new"        # captured, not yet triaged (no due date semantics applied)
-ACTIVE = "active"  # triaged; displayed bucket derived from due
-DONE = "done"      # completed
+# Longest a `lock` acquisition will block before giving up.
+LOCK_WAIT_SECONDS = 10
+
+# Stored states, each its own file. The priority buckets (today/soon/someday/
+# overdue) are NOT stored -- they are derived from an item's due date at read
+# time, so a task's urgency moves with the calendar without a mover job.
+NEW = "new"        # captured, not yet triaged
+ACTIVE = "active"  # triaged; displayed bucket derived from due date
+DONE = "done"      # completed, awaiting reap
 FILES = (NEW, ACTIVE, DONE)
 
-# Derived display buckets for ACTIVE items, in display-priority order.
+# Derived display buckets for ACTIVE items, most urgent first.
 OVERDUE = "overdue"
 TODAY = "today"
 SOON = "soon"
 SOMEDAY = "someday"
-
-# Display order for the working list: new first, then derived active buckets.
 DERIVED_ORDER = (OVERDUE, TODAY, SOON, SOMEDAY)
 
-SOON_DAYS = 3
-REAP_DAYS = 7
-
-# --- Time helpers -----------------------------------------------------------
-
-
-def now() -> datetime:
-    """Timezone-aware local now (offset from the system)."""
-    return datetime.now().astimezone()
-
-
-def iso(dt: datetime) -> str:
-    return dt.isoformat()
-
-
-def parse_iso(s):
-    if not s:
-        return None
-    return datetime.fromisoformat(s)
-
-
-def end_of_today() -> datetime:
-    n = now()
-    return datetime.combine(n.date(), time(23, 59, 59), tzinfo=n.tzinfo)
-
-
-def soon_horizon() -> datetime:
-    """End of the soon window: end of the day SOON_DAYS from today."""
-    n = now()
-    return datetime.combine(
-        (n.date() + timedelta(days=SOON_DAYS)), time(23, 59, 59), tzinfo=n.tzinfo
-    )
-
-
-def derive_bucket(task: dict) -> str:
-    """Compute the display bucket for an ACTIVE item from its due date.
-
-    No due date renders as someday. This recomputes on every read, so an item
-    due 'tomorrow' becomes 'today' when the day rolls over -- no mover job.
-    """
-    due = parse_iso(task.get("due"))
-    if due is None:
-        return SOMEDAY
-    n = now()
-    if due < n:
-        return OVERDUE
-    if due <= end_of_today():
-        return TODAY
-    if due <= soon_horizon():
-        return SOON
-    return SOMEDAY
-
-
-# --- Storage ----------------------------------------------------------------
-
-
-def file_path(name: str) -> Path:
-    return DATA_DIR / f"{name}.jsonl"
-
-
-def ensure_dirs():
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-
-
-@contextmanager
-def locked():
-    """Exclusive OS mutex around a read-modify-write critical section.
-
-    flock is advisory and kernel-released on process death. All writers take it;
-    the AI cron uses try_lock() instead so it can skip a busy window.
-    """
-    ensure_dirs()
-    fd = os.open(LOCK_FILE, os.O_CREAT | os.O_RDWR, 0o644)
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
-        yield
-    finally:
-        fcntl.flock(fd, fcntl.LOCK_UN)
-        os.close(fd)
-
-
-@contextmanager
-def try_locked():
-    """Non-blocking variant. Yields True if the lock was acquired, else False."""
-    ensure_dirs()
-    fd = os.open(LOCK_FILE, os.O_CREAT | os.O_RDWR, 0o644)
-    got = False
-    try:
-        try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            got = True
-        except BlockingIOError:
-            got = False
-        yield got
-    finally:
-        if got:
-            fcntl.flock(fd, fcntl.LOCK_UN)
-        os.close(fd)
-
-
-def read_file(name: str) -> list:
-    """Read a state file into a list of task dicts. Missing file -> []."""
-    p = file_path(name)
-    if not p.exists():
-        return []
-    tasks = []
-    for line in p.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        tasks.append(json.loads(line))
-    return tasks
-
-
-def write_file(name: str, tasks: list):
-    """Atomically replace a state file (temp + os.replace)."""
-    p = file_path(name)
-    tmp = p.with_suffix(p.suffix + ".tmp")
-    with tmp.open("w", encoding="utf-8") as f:
-        for t in tasks:
-            f.write(json.dumps(t, ensure_ascii=False) + "\n")
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(tmp, p)
-
-
-def append_file(name: str, task: dict):
-    """True append for the capture path; still lock-guarded by the caller."""
-    ensure_dirs()
-    p = file_path(name)
-    with p.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(task, ensure_ascii=False) + "\n")
-
-
-def find_task(task_id: str):
-    """Locate a task by id across all files. Returns (file, task) or (None, None)."""
-    for name in FILES:
-        for t in read_file(name):
-            if t.get("id") == task_id:
-                return name, t
-    return None, None
-
-
-def new_task(text: str, due=None) -> dict:
-    return {
-        "id": uuid.uuid4().hex[:12],
-        "captured": iso(now()),
-        "due": iso(due) if due else None,
-        "text": text,
-    }
-
-
-def _remove_from(name: str, task_id: str):
-    write_file(name, [t for t in read_file(name) if t.get("id") != task_id])
-
-
-# --- Due-date parsing -------------------------------------------------------
-
-
-def parse_when(s):
-    """Parse a due argument. Accepts ISO-8601 or 'today'/'tomorrow'/'+Nd'.
-
-    Rich natural-language parsing is the AI router's job; this handles the
-    explicit cases a human or the router passes in. Returns None for a clear.
-    """
-    if s is None:
-        return None
-    s = s.strip().lower()
-    if s in ("", "none", "clear"):
-        return None
-    if s == "today":
-        return end_of_today()
-    if s == "tomorrow":
-        return datetime.combine(
-            (now() + timedelta(days=1)).date(), time(23, 59, 59), tzinfo=now().tzinfo
-        )
-    if s.startswith("+") and s.endswith("d") and s[1:-1].isdigit():
-        return now() + timedelta(days=int(s[1:-1]))
-    return parse_iso(s)  # assume ISO; raises if malformed
-
-
-# --- Sorting / rendering ----------------------------------------------------
-
-
-def is_overdue(task: dict) -> bool:
-    due = parse_iso(task.get("due"))
-    return due is not None and due < now()
-
-
-# --- Subcommands: writes ----------------------------------------------------
-
-
-def cmd_add(args):
-    """Capture a task. Default: into NEW with no due date, no AI.
-
-    With --due, the task is triaged immediately into ACTIVE (its displayed
-    bucket is derived from the date).
-    """
-    text = args.text.strip()
-    if not text:
-        print("empty task, nothing added", file=sys.stderr)
-        return 1
-    with locked():
-        if args.due is not None:
-            append_file(ACTIVE, new_task(text, parse_when(args.due)))
-        else:
-            append_file(NEW, new_task(text))
-    return 0
-
-
-def cmd_set_due(args):
-    """Set or clear a task's due date.
-
-    The due date is the primary control; the displayed bucket is derived from
-    it. Setting a due date on a NEW item triages it into ACTIVE. Clearing a due
-    date leaves the item in ACTIVE, where it renders as someday. There is no
-    separate 'move to bucket' -- you move an item by changing its date.
-    """
-    due = parse_when(args.due)
-    with locked():
-        src, task = find_task(args.id)
-        if task is None:
-            print(f"no task with id {args.id}", file=sys.stderr)
-            return 1
-        if src == DONE:
-            print("cannot set due on a completed task; uncomplete it first",
-                  file=sys.stderr)
-            return 1
-        task["due"] = iso(due) if due else None
-        if src == NEW:
-            # Any triage decision (even clearing) moves NEW -> ACTIVE.
-            _remove_from(NEW, args.id)
-            append_file(ACTIVE, task)
-        else:
-            _replace_in_active(task)
-    return 0
-
-
-def cmd_triage(args):
-    """Move a NEW item into ACTIVE without setting a due date (-> someday).
-
-    Convenience for 'this is a real task but has no deadline'. Idempotent for
-    items already in ACTIVE.
-    """
-    with locked():
-        src, task = find_task(args.id)
-        if task is None:
-            print(f"no task with id {args.id}", file=sys.stderr)
-            return 1
-        if src == NEW:
-            _remove_from(NEW, args.id)
-            append_file(ACTIVE, task)
-    return 0
-
-
-def cmd_complete(args):
-    with locked():
-        src, task = find_task(args.id)
-        if task is None:
-            print(f"no task with id {args.id}", file=sys.stderr)
-            return 1
-        if src == DONE:
-            return 0
-        task["completed"] = iso(now())
-        task["from"] = src
-        _remove_from(src, args.id)
-        append_file(DONE, task)
-    return 0
-
-
-def cmd_uncomplete(args):
-    """Move a completed task back to ACTIVE (bucket re-derived from its due)."""
-    with locked():
-        src, task = find_task(args.id)
-        if task is None:
-            print(f"no task with id {args.id}", file=sys.stderr)
-            return 1
-        if src != DONE:
-            return 0
-        task.pop("completed", None)
-        task.pop("from", None)
-        _remove_from(DONE, args.id)
-        append_file(ACTIVE, task)
-    return 0
-
-
-def cmd_delete(args):
-    with locked():
-        src, task = find_task(args.id)
-        if task is None:
-            print(f"no task with id {args.id}", file=sys.stderr)
-            return 1
-        _remove_from(src, args.id)
-    return 0
-
-
-def _replace_in_active(task: dict):
-    tasks = [task if t.get("id") == task["id"] else t for t in read_file(ACTIVE)]
-    write_file(ACTIVE, tasks)
-
-
-def cmd_reap(args):
-    """Delete completed items older than the retention window."""
-    cutoff = now() - timedelta(days=REAP_DAYS)
-    with locked():
-        kept, removed = [], 0
-        for t in read_file(DONE):
-            done_at = parse_iso(t.get("completed"))
-            if done_at and done_at < cutoff:
-                removed += 1
-            else:
-                kept.append(t)
-        if removed:
-            write_file(DONE, kept)
-    if args.verbose:
-        print(f"reaped {removed} completed item(s) older than {REAP_DAYS}d")
-    return 0
-
-
-# --- Subcommands: reads -----------------------------------------------------
-
-# Sort weight for derived buckets so the working list orders new -> overdue ->
-# today -> soon -> someday.
-_ROW_ORDER = {NEW: 0, OVERDUE: 1, TODAY: 2, SOON: 3, SOMEDAY: 4}
-
-
-def collect_rows(filter_bucket=None):
-    """Return (display_bucket, task) rows in display order.
-
-    NEW items carry the display bucket 'new'. ACTIVE items get a derived
-    bucket. filter_bucket, if given, restricts to one display bucket
-    (new/overdue/today/soon/someday/done).
-    """
-    rows = []
-    for t in read_file(NEW):
-        rows.append((NEW, t))
-    for t in read_file(ACTIVE):
-        rows.append((derive_bucket(t), t))
-    if filter_bucket == DONE:
-        rows = [(DONE, t) for t in read_file(DONE)]
-    elif filter_bucket:
-        rows = [(b, t) for b, t in rows if b == filter_bucket]
-
-    def key(row):
-        b, t = row
-        due = parse_iso(t.get("due"))
-        return (_ROW_ORDER.get(b, 9), due or now().replace(year=9999))
-
-    rows.sort(key=key)
-    return rows
-
-
-def cmd_list(args):
-    rows = collect_rows(filter_bucket=args.bucket)
-    if args.json:
-        print(json.dumps([dict(bucket=b, **t) for b, t in rows], ensure_ascii=False))
-        return 0
-    for b, t in rows:
-        print(_render_row(b, t))
-    return 0
-
-
-def cmd_overdue(args):
-    rows = collect_rows(filter_bucket=OVERDUE)
-    if args.json:
-        print(json.dumps([dict(bucket=b, **t) for b, t in rows], ensure_ascii=False))
-        return 0
-    for b, t in rows:
-        print(_render_row(b, t))
-    return 0
-
+# Working-list order: NEW ahead of the derived buckets.
+_ROW_ORDER = {name: i for i, name in enumerate((NEW, *DERIVED_ORDER))}
+
+SOON_DAYS = 3    # due within this many days (past today) counts as "soon"
+REAP_DAYS = 7    # completed items are deleted this long after completion
 
 BUCKET_GLYPH = {
     NEW: "󰎃",
@@ -427,277 +67,527 @@ BUCKET_GLYPH = {
 }
 
 
-def _render_row(bucket, task):
-    """One display line: <id>\t<glyph><overdue><due>  <text>.
+# --- Time helpers -----------------------------------------------------------
 
-    The UI cuts on the tab and hides the id column; the id is what every
-    mutation passes back to the CLI.
+
+def now() -> datetime:
+    """Timezone-aware local now (carries the system UTC offset)."""
+    return datetime.now().astimezone()
+
+
+def iso(dt: datetime) -> str:
+    return dt.isoformat()
+
+
+def parse_iso(value: Optional[str]) -> Optional[datetime]:
+    """Parse an ISO-8601 string to a tz-aware datetime; None/empty -> None.
+
+    A bare date like '2026-09-18' parses as naive; we attach the local offset so
+    it can never poison a comparison against tz-aware now(). Dates without a time
+    anchor to end-of-day, matching how `today`/`tomorrow` are stored.
     """
-    tid = task["id"]
-    text = task["text"]
-    glyph = BUCKET_GLYPH.get(bucket, "")
+    if not value:
+        return None
+    dt = datetime.fromisoformat(value)
+    if dt.tzinfo is None:
+        anchor = dt if (dt.hour or dt.minute or dt.second) else _end_of(dt)
+        dt = anchor.replace(tzinfo=now().tzinfo)
+    return dt
+
+
+def _end_of(day: datetime) -> datetime:
+    """The last second of the calendar day containing ``day``."""
+    return datetime.combine(day.date(), time(23, 59, 59), tzinfo=day.tzinfo)
+
+
+def end_of_today() -> datetime:
+    return _end_of(now())
+
+
+def soon_horizon() -> datetime:
+    """End of the soon window: last second of the day SOON_DAYS from today."""
+    return _end_of(now() + timedelta(days=SOON_DAYS))
+
+
+def derive_bucket(task: Task) -> str:
+    """Map an ACTIVE task to its display bucket from its due date.
+
+    No due date is someday. Recomputed on every read, so a task due 'tomorrow'
+    becomes 'today' when the day turns over.
+    """
+    due = parse_iso(task.get("due"))
+    if due is None:
+        return SOMEDAY
+    if due < now():
+        return OVERDUE
+    if due <= end_of_today():
+        return TODAY
+    if due <= soon_horizon():
+        return SOON
+    return SOMEDAY
+
+
+# --- Due-date parsing -------------------------------------------------------
+
+
+def parse_when(value: Optional[str]) -> Optional[datetime]:
+    """Parse a due-date argument into a datetime, or None for a clear.
+
+    Accepts the explicit forms a caller supplies: an ISO-8601 string, ``today``,
+    ``tomorrow``, or ``+Nd`` (N days out). ``clear``/``none``/empty -> None.
+    A malformed ISO string raises ValueError (surfaced to the caller).
+    """
+    if value is None:
+        return None
+    text = value.strip().lower()
+    if text in ("", "none", "clear"):
+        return None
+    if text == "today":
+        return end_of_today()
+    if text == "tomorrow":
+        return _end_of(now() + timedelta(days=1))
+    if text.startswith("+") and text.endswith("d") and text[1:-1].isdigit():
+        return now() + timedelta(days=int(text[1:-1]))
+    return parse_iso(text)
+
+
+# --- Storage ----------------------------------------------------------------
+
+
+def file_path(name: str) -> Path:
+    return DATA_DIR / f"{name}.jsonl"
+
+
+def ensure_dirs() -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def read_file(name: str) -> list[Task]:
+    """Read a state file into a list of tasks. A missing file reads as empty."""
+    path = file_path(name)
+    if not path.exists():
+        return []
+    return [
+        json.loads(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+
+def write_file(name: str, tasks: list[Task]) -> None:
+    """Replace a state file atomically (write temp, fsync, rename)."""
+    path = file_path(name)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with tmp.open("w", encoding="utf-8") as f:
+        for task in tasks:
+            f.write(json.dumps(task, ensure_ascii=False) + "\n")
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+
+
+def append_file(name: str, task: Task) -> None:
+    """Append one task to a state file (the capture-fast path)."""
+    ensure_dirs()
+    with file_path(name).open("a", encoding="utf-8") as f:
+        f.write(json.dumps(task, ensure_ascii=False) + "\n")
+
+
+def remove_from(name: str, task_id: str) -> None:
+    write_file(name, [t for t in read_file(name) if t.get("id") != task_id])
+
+
+def replace_in(name: str, task: Task) -> None:
+    write_file(name, [task if t.get("id") == task["id"] else t for t in read_file(name)])
+
+
+def find_task(task_id: str) -> tuple[Optional[str], Optional[Task]]:
+    """Locate a task by id across all files. Returns (file, task) or (None, None)."""
+    for name in FILES:
+        for task in read_file(name):
+            if task.get("id") == task_id:
+                return name, task
+    return None, None
+
+
+def new_task(text: str, due: Optional[datetime] = None) -> Task:
+    return {
+        "id": uuid.uuid4().hex[:12],
+        "captured": iso(now()),
+        "due": iso(due) if due else None,
+        "text": text,
+    }
+
+
+# --- Locking ----------------------------------------------------------------
+#
+# Two layers:
+#   flock (LOCK_FILE)  -- guards a single read-modify-write so it is atomic.
+#   session (SESSION_FILE) -- an advisory, cross-command lock: a caller runs
+#                             `lock` once, then many mutations under its hash,
+#                             then `unlock`, so a whole select-then-act batch
+#                             cannot interleave with another writer.
+
+
+class LockError(Exception):
+    """Raised when the session-lock policy blocks a mutation."""
+
+
+@contextmanager
+def flock_blocking() -> Iterator[None]:
+    """Hold the exclusive flock for the duration of the block."""
+    ensure_dirs()
+    fd = os.open(LOCK_FILE, os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        os.close(fd)
+
+
+@contextmanager
+def flock_bounded() -> Iterator[bool]:
+    """Try to hold the flock, polling up to LOCK_WAIT_SECONDS.
+
+    Yields True if acquired (and holds it for the block), False on timeout.
+    """
+    ensure_dirs()
+    fd = os.open(LOCK_FILE, os.O_CREAT | os.O_RDWR, 0o644)
+    deadline = clock.monotonic() + LOCK_WAIT_SECONDS
+    acquired = False
+    try:
+        while True:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                acquired = True
+                break
+            except BlockingIOError:
+                if clock.monotonic() >= deadline:
+                    break
+                clock.sleep(0.1)
+        yield acquired
+    finally:
+        if acquired:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        os.close(fd)
+
+
+def session_held() -> Optional[str]:
+    """The current session-lock hash, or None. Call while holding the flock."""
+    if not SESSION_FILE.exists():
+        return None
+    return SESSION_FILE.read_text(encoding="utf-8").strip() or None
+
+
+def check_session(lock_id: Optional[str]) -> None:
+    """Enforce the session-lock policy for a mutation (call under the flock).
+
+    A supplied lock_id is a claim of "I hold the session"; it must match. No
+    lock_id means an ad-hoc mutation, allowed only when no session is held.
+    """
+    held = session_held()
+    if lock_id is None:
+        if held is not None:
+            raise LockError(
+                f"locked by session {held}; To clear the lock, use "
+                f"`todo unlock --force`"
+            )
+        return
+    if held is None:
+        raise LockError("no session lock is held; --lock-id refers to nothing")
+    if lock_id != held:
+        raise LockError(f"session lock mismatch: held by {held}")
+
+
+@contextmanager
+def mutating(lock_id: Optional[str] = None) -> Iterator[None]:
+    """Flock-guarded critical section that also enforces the session policy."""
+    with flock_blocking():
+        check_session(lock_id)
+        yield
+
+
+class TaskNotFound(Exception):
+    """A referenced task id does not exist in any state file."""
+
+
+def require_task(task_id: str) -> tuple[str, Task]:
+    """find_task, but raise TaskNotFound instead of returning (None, None)."""
+    name, task = find_task(task_id)
+    if task is None:
+        raise TaskNotFound(f"no task with id {task_id}")
+    return name, task
+
+
+# --- Subcommands: mutations -------------------------------------------------
+
+
+def cmd_add(args: argparse.Namespace) -> int:
+    """Capture a task.
+
+    Bare capture lands in NEW (no due date). ``--due`` triages immediately into
+    ACTIVE, where the displayed bucket derives from the date.
+    """
+    text = args.text.strip()
+    if not text:
+        print("empty task, nothing added", file=sys.stderr)
+        return 1
+    with mutating(args.lock_id):
+        if args.due is not None:
+            append_file(ACTIVE, new_task(text, parse_when(args.due)))
+        else:
+            append_file(NEW, new_task(text))
+    return 0
+
+
+def cmd_set_due(args: argparse.Namespace) -> int:
+    """Set or clear a task's due date; the bucket follows from the date.
+
+    Dating a NEW task triages it into ACTIVE. Clearing a date leaves the task in
+    ACTIVE as someday. There is no separate 'move' -- changing the date is how a
+    task changes bucket.
+    """
+    due = parse_when(args.due)
+    with mutating(args.lock_id):
+        src, task = require_task(args.id)
+        if src == DONE:
+            print("cannot set due on a completed task; uncomplete it first",
+                  file=sys.stderr)
+            return 1
+        task["due"] = iso(due) if due else None
+        if src == NEW:
+            remove_from(NEW, args.id)
+            append_file(ACTIVE, task)
+        else:
+            replace_in(ACTIVE, task)
+    return 0
+
+
+def cmd_complete(args: argparse.Namespace) -> int:
+    """Move a task to DONE, stamping the completion time and its origin file."""
+    with mutating(args.lock_id):
+        src, task = require_task(args.id)
+        if src == DONE:
+            return 0
+        task["completed"] = iso(now())
+        task["from"] = src
+        remove_from(src, args.id)
+        append_file(DONE, task)
+    return 0
+
+
+def cmd_uncomplete(args: argparse.Namespace) -> int:
+    """Return a completed task to ACTIVE (its bucket re-derives from the due date)."""
+    with mutating(args.lock_id):
+        src, task = require_task(args.id)
+        if src != DONE:
+            return 0
+        task.pop("completed", None)
+        task.pop("from", None)
+        remove_from(DONE, args.id)
+        append_file(ACTIVE, task)
+    return 0
+
+
+def cmd_delete(args: argparse.Namespace) -> int:
+    with mutating(args.lock_id):
+        src, _ = require_task(args.id)
+        remove_from(src, args.id)
+    return 0
+
+
+def cmd_reap(args: argparse.Namespace) -> int:
+    """Delete completed tasks whose completion is older than REAP_DAYS."""
+    cutoff = now() - timedelta(days=REAP_DAYS)
+    with mutating(args.lock_id):
+        kept, removed = [], 0
+        for task in read_file(DONE):
+            completed = parse_iso(task.get("completed"))
+            if completed and completed < cutoff:
+                removed += 1
+            else:
+                kept.append(task)
+        if removed:
+            write_file(DONE, kept)
+    if args.verbose:
+        print(f"reaped {removed} completed item(s) older than {REAP_DAYS}d")
+    return 0
+
+
+# --- Subcommands: session lock ----------------------------------------------
+
+
+def cmd_lock(args: argparse.Namespace) -> int:
+    """Acquire the session lock and print its hash.
+
+    Blocks up to LOCK_WAIT_SECONDS for the flock, then refuses if a session is
+    already held. The hash outlives this process; the caller passes it as
+    ``--lock-id`` to mutate, then releases with ``todo unlock <hash>``.
+    """
+    with flock_bounded() as acquired:
+        if not acquired:
+            print(f"could not acquire lock within {LOCK_WAIT_SECONDS}s",
+                  file=sys.stderr)
+            return 1
+        held = session_held()
+        if held is not None:
+            print(f"already locked by session {held}", file=sys.stderr)
+            return 1
+        token = uuid.uuid4().hex[:12]
+        SESSION_FILE.write_text(token, encoding="utf-8")
+    print(token)
+    return 0
+
+
+def cmd_unlock(args: argparse.Namespace) -> int:
+    """Release the session lock. Needs the matching hash, or ``--force``."""
+    with flock_blocking():
+        held = session_held()
+        if held is None:
+            return 0
+        if not args.force and args.hash != held:
+            print(f"lock is held by {held}; pass the matching hash or --force",
+                  file=sys.stderr)
+            return 1
+        SESSION_FILE.unlink(missing_ok=True)
+    return 0
+
+
+# --- Subcommands: reads -----------------------------------------------------
+
+
+def collect_rows(filter_bucket: Optional[str] = None) -> list[tuple[str, Task]]:
+    """Return (display_bucket, task) pairs in display order.
+
+    NEW tasks display as 'new'; ACTIVE tasks get a derived bucket. ``done`` is
+    only included when explicitly filtered for. ``filter_bucket`` restricts the
+    result to a single display bucket. Order is bucket priority, then due date
+    ascending (undated last).
+    """
+    if filter_bucket == DONE:
+        rows = [(DONE, t) for t in read_file(DONE)]
+    else:
+        rows = [(NEW, t) for t in read_file(NEW)]
+        rows += [(derive_bucket(t), t) for t in read_file(ACTIVE)]
+        if filter_bucket:
+            rows = [row for row in rows if row[0] == filter_bucket]
+
+    undated = now().replace(year=9999)  # sentinel so undated tasks sort last
+    rows.sort(key=lambda row: (_ROW_ORDER.get(row[0], 99),
+                               parse_iso(row[1].get("due")) or undated))
+    return rows
+
+
+def cmd_list(args: argparse.Namespace) -> int:
+    rows = collect_rows(filter_bucket=args.filter)
+    if args.json:
+        # Machine consumers always get canonical (most-urgent-first) order.
+        print(json.dumps([dict(bucket=b, **t) for b, t in rows], ensure_ascii=False))
+        return 0
+    if args.reverse:
+        rows.reverse()
+    if args.quiet:
+        # id|due|text per line; due empty when unset. text is last so pipes in
+        # it never shift the id/due columns. e.g. `... -q | cut -d'|' -f3`.
+        for _, task in rows:
+            print(f"{task['id']}|{task.get('due') or ''}|{task['text']}")
+        return 0
+    for bucket, task in rows:
+        print(render_row(bucket, task))
+    return 0
+
+
+def render_row(bucket: str, task: Task) -> str:
+    """Format a task for the fzf UI: ``id<TAB>glyph overdue due  text``.
+
+    The UI hides the id column (splitting on the tab) and passes the id back to
+    the CLI for mutations.
+    """
     due = parse_iso(task.get("due"))
     if due:
         overdue = "!" if due < now() else " "
-        due_s = due.strftime("%m-%d")
+        due_str = due.strftime("%m-%d")
     else:
-        overdue, due_s = " ", "     "
-    return f"{tid}\t{glyph}{overdue}{due_s}  {text}"
-
-
-# --- AI routing hook --------------------------------------------------------
-
-
-def cmd_route_new(args):
-    """Drain NEW by asking the router for a due date per item, moving to ACTIVE.
-
-    The router only decides a due date now; the displayed bucket is derived
-    from that date, so the router no longer picks a bucket. Skips silently when
-    AI is disabled or the lock is held (user mid-edit); a detached pass loses
-    nothing by deferring. The AI call is delegated to $TODO_ROUTER, which
-    receives one JSON task on stdin and prints {"due": "<iso|null>"} on stdout.
-    A null due is valid: the item lands in ACTIVE as someday.
-    """
-    if AI_OFF_FILE.exists():
-        if args.verbose:
-            print("ai routing disabled (ai-off present)")
-        return 0
-    router = os.environ.get("TODO_ROUTER")
-    if not router:
-        if args.verbose:
-            print("no $TODO_ROUTER configured; NEW left untouched")
-        return 0
-
-    with try_locked() as got:
-        if not got:
-            if args.verbose:
-                print("busy (lock held); skipping this window")
-            return 0
-        inbox = read_file(NEW)
-        if not inbox:
-            return 0
-        remaining = []
-        for task in inbox:
-            decision = _run_router(router, task)
-            if decision is None:
-                remaining.append(task)  # leave for next pass on failure
-                continue
-            due = parse_iso(decision.get("due")) if decision.get("due") else None
-            task["due"] = iso(due) if due else None
-            append_file(ACTIVE, task)
-        write_file(NEW, remaining)
-    return 0
-
-
-def _run_router(router: str, task: dict):
-    try:
-        proc = subprocess.run(
-            router,
-            shell=True,
-            input=json.dumps(task, ensure_ascii=False),
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        if proc.returncode != 0:
-            return None
-        return json.loads(proc.stdout)
-    except (subprocess.SubprocessError, json.JSONDecodeError):
-        return None
-
-
-# --- Overdue notifier -------------------------------------------------------
-
-
-def cmd_notify(args):
-    """Fire dunst notifications for overdue items. No AI. Notify-once/day."""
-    ensure_dirs()
-    state = {}
-    if NOTIFIED_FILE.exists():
-        try:
-            state = json.loads(NOTIFIED_FILE.read_text())
-        except json.JSONDecodeError:
-            state = {}
-    today_key = now().date().isoformat()
-    changed = False
-    overdue_rows = collect_rows(filter_bucket=OVERDUE)
-    for _, t in overdue_rows:
-        # Re-notify at most once per day per task.
-        if state.get(t["id"]) == today_key:
-            continue
-        _notify_send("Overdue task", t["text"])
-        state[t["id"]] = today_key
-        changed = True
-    # Drop state for tasks that are no longer overdue/present.
-    live = {t["id"] for _, t in overdue_rows}
-    for tid in list(state):
-        if tid not in live:
-            del state[tid]
-            changed = True
-    if changed:
-        NOTIFIED_FILE.write_text(json.dumps(state))
-    return 0
-
-
-def _notify_send(summary, body):
-    try:
-        subprocess.run(
-            ["notify-send", "-u", "normal", summary, body],
-            check=False,
-        )
-    except FileNotFoundError:
-        pass
-
-
-# --- Kill switch ------------------------------------------------------------
-
-
-def cmd_ai(args):
-    ensure_dirs()
-    if args.state == "off":
-        AI_OFF_FILE.touch()
-        print("ai routing disabled")
-    elif args.state == "on":
-        AI_OFF_FILE.unlink(missing_ok=True)
-        print("ai routing enabled")
-    else:
-        print("disabled" if AI_OFF_FILE.exists() else "enabled")
-    return 0
-
-
-# --- Migration from the old ~/.todo-list glyph format ----------------------
-
-# Old format glyphs (Nerd Font). Entries were sometimes concatenated on one
-# physical line (the known bug), so split on the priority glyphs, not newlines.
-_OLD_HIGH = "\U000f17be"
-_OLD_LOW = "\U000f17a4"
-_OLD_DONE = "\U000f0c52"
-_OLD_PEND = "\U000f0131"
-
-
-def cmd_migrate(args):
-    src = Path(args.path).expanduser()
-    if not src.exists():
-        print(f"no such file: {src}", file=sys.stderr)
-        return 1
-    raw = src.read_text(encoding="utf-8")
-    entries = []
-    # Split on priority glyphs so concatenated entries separate correctly.
-    for prio in (_OLD_HIGH, _OLD_LOW):
-        raw = raw.replace(prio, "\x00" + prio)
-    for chunk in raw.split("\x00"):
-        chunk = chunk.strip()
-        if not chunk or chunk[0] not in (_OLD_HIGH, _OLD_LOW):
-            continue
-        high = chunk[0] == _OLD_HIGH
-        rest = chunk[1:].strip()
-        completed = rest.startswith(_OLD_DONE)
-        # Drop the leading state glyph (done or pending).
-        for g in (_OLD_DONE, _OLD_PEND):
-            if rest.startswith(g):
-                rest = rest[len(g):].strip()
-                break
-        # The known data bug: a task written without its glyph prefix ends up
-        # glued onto the previous entry, split by a newline. Recover any such
-        # trailing lines as separate untagged (inbox) entries.
-        lines = [ln.strip() for ln in rest.split("\n") if ln.strip()]
-        if lines:
-            entries.append((high, completed, lines[0]))
-            for extra in lines[1:]:
-                entries.append((False, False, extra))  # untagged -> inbox
-
-    with locked():
-        added = 0
-        for high, completed, text in entries:
-            if not text:
-                continue
-            if completed:
-                t = new_task(text)
-                t["completed"] = iso(now())
-                t["from"] = ACTIVE
-                append_file(DONE, t)
-            elif high:
-                # High-priority pending -> ACTIVE due today (renders as today).
-                append_file(ACTIVE, new_task(text, end_of_today()))
-            else:
-                # Everything else -> NEW, to be triaged. Preserves "don't lose it".
-                append_file(NEW, new_task(text))
-            added += 1
-    print(f"migrated {added} item(s) from {src}")
-    return 0
+        overdue, due_str = " ", "     "
+    glyph = BUCKET_GLYPH.get(bucket, "")
+    return f"{task['id']}\t{glyph}{overdue}{due_str}  {task['text']}"
 
 
 # --- CLI --------------------------------------------------------------------
 
 
-def build_parser():
-    p = argparse.ArgumentParser(prog="todo", description=__doc__)
-    sub = p.add_subparsers(dest="cmd", required=True)
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="todo", description=__doc__)
+    sub = parser.add_subparsers(dest="cmd", required=True)
 
-    a = sub.add_parser("add", help="capture a task (default: into NEW)")
-    a.add_argument("text")
-    a.add_argument("--due", help="triage straight to ACTIVE with this due date")
-    a.set_defaults(func=cmd_add)
+    def lockable(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
+        """Give a mutating command the --lock-id option (run inside a session)."""
+        p.add_argument(
+            "--lock-id", dest="lock_id", default=None,
+            help="hash from `todo lock`; required to mutate while a session is held",
+        )
+        return p
 
-    sd = sub.add_parser(
-        "set-due", help="set/clear due date (moves NEW->ACTIVE; bucket derived)"
-    )
-    sd.add_argument("id")
-    sd.add_argument("due", help="ISO date, 'today', 'tomorrow', '+Nd', or 'clear'")
-    sd.set_defaults(func=cmd_set_due)
+    add = lockable(sub.add_parser("add", help="capture a task (default: into NEW)"))
+    add.add_argument("text")
+    add.add_argument("--due", help="triage straight to ACTIVE with this due date")
+    add.set_defaults(func=cmd_add)
 
-    tr = sub.add_parser("triage", help="move a NEW item to ACTIVE (no due -> someday)")
-    tr.add_argument("id")
-    tr.set_defaults(func=cmd_triage)
+    set_due = lockable(sub.add_parser(
+        "set-due", help="set/clear due date (moves NEW->ACTIVE; bucket derived)"))
+    set_due.add_argument("id")
+    set_due.add_argument("due", help="ISO date, 'today', 'tomorrow', '+Nd', or 'clear'")
+    set_due.set_defaults(func=cmd_set_due)
 
-    c = sub.add_parser("complete", help="mark a task done")
-    c.add_argument("id")
-    c.set_defaults(func=cmd_complete)
+    complete = lockable(sub.add_parser("complete", help="mark a task done"))
+    complete.add_argument("id")
+    complete.set_defaults(func=cmd_complete)
 
-    uc = sub.add_parser("uncomplete", help="move a completed task back to ACTIVE")
-    uc.add_argument("id")
-    uc.set_defaults(func=cmd_uncomplete)
+    uncomplete = lockable(sub.add_parser(
+        "uncomplete", help="move a completed task back to ACTIVE"))
+    uncomplete.add_argument("id")
+    uncomplete.set_defaults(func=cmd_uncomplete)
 
-    d = sub.add_parser("delete", help="delete a task")
-    d.add_argument("id")
-    d.set_defaults(func=cmd_delete)
+    delete = lockable(sub.add_parser("delete", help="delete a task"))
+    delete.add_argument("id")
+    delete.set_defaults(func=cmd_delete)
 
-    li = sub.add_parser("list", help="list tasks in display order")
-    li.add_argument(
-        "--bucket", choices=(NEW, OVERDUE, TODAY, SOON, SOMEDAY, DONE)
-    )
-    li.add_argument("--json", action="store_true")
-    li.set_defaults(func=cmd_list)
+    listing = sub.add_parser("list", help="list tasks in display order")
+    listing.add_argument(
+        "--filter", dest="filter", choices=(NEW, OVERDUE, TODAY, SOON, SOMEDAY, DONE),
+        help="show only this category")
+    listing.add_argument(
+        "--reverse", action="store_true",
+        help="emit least-urgent first (for a bottom-anchored UI)")
+    listing.add_argument("--json", action="store_true")
+    listing.add_argument(
+        "-q", "--quiet", action="store_true",
+        help="print 'id|due|text' per line for scripting")
+    listing.set_defaults(func=cmd_list)
 
-    ov = sub.add_parser("overdue", help="list overdue tasks")
-    ov.add_argument("--json", action="store_true")
-    ov.set_defaults(func=cmd_overdue)
+    reap = lockable(sub.add_parser("reap", help="delete old completed tasks"))
+    reap.add_argument("-v", "--verbose", action="store_true")
+    reap.set_defaults(func=cmd_reap)
 
-    rn = sub.add_parser("route-new", help="AI routing pass over NEW")
-    rn.add_argument("-v", "--verbose", action="store_true")
-    rn.set_defaults(func=cmd_route_new)
+    lock = sub.add_parser("lock", help="acquire the session lock; prints its hash")
+    lock.set_defaults(func=cmd_lock)
 
-    rp = sub.add_parser("reap", help="delete old completed tasks")
-    rp.add_argument("-v", "--verbose", action="store_true")
-    rp.set_defaults(func=cmd_reap)
+    unlock = sub.add_parser("unlock", help="release the session lock")
+    unlock.add_argument("hash", nargs="?", help="the hash from `todo lock`")
+    unlock.add_argument("--force", action="store_true", help="release regardless of hash")
+    unlock.set_defaults(func=cmd_unlock)
 
-    nt = sub.add_parser("notify", help="notify on overdue tasks (dunst)")
-    nt.set_defaults(func=cmd_notify)
-
-    ai = sub.add_parser("ai", help="toggle/query AI routing kill-switch")
-    ai.add_argument("state", nargs="?", choices=("on", "off"))
-    ai.set_defaults(func=cmd_ai)
-
-    mig = sub.add_parser("migrate", help="import the old ~/.todo-list glyph file")
-    mig.add_argument("path", nargs="?", default=str(Path.home() / ".todo-list"))
-    mig.set_defaults(func=cmd_migrate)
-
-    return p
+    return parser
 
 
-def main(argv=None):
+def main(argv: Optional[list[str]] = None) -> int:
     args = build_parser().parse_args(argv)
-    return args.func(args) or 0
+    try:
+        return args.func(args) or 0
+    except (LockError, TaskNotFound) as err:
+        print(str(err), file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

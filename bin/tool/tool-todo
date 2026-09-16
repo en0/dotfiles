@@ -25,39 +25,60 @@ exec_ui() {
 
     "$TODO" reap   # opportunistic cleanup on open
 
-    local list="$TODO list"
+    # Bottom-anchored UI: least-urgent first so the most-urgent row sits just
+    # above the prompt. --reverse is the CLI expressing that display order.
+    local list="$TODO list --reverse"
     local prompt header
     local -a binds
 
-    # filter <bucket> <label>  -> reload scoped to a derived bucket, relabel prompt
-    flt() { echo "reload($TODO list --bucket $1)+change-prompt($2> )"; }
+    # Section-marker glyphs at the start of each header line.
+    local NG=$'\U000f0a1d'     # 󰨝 navigation line
+    local AG_VIEW=$'\ueaf1'    # TODO action line
+    local AG_REFINE=$'\ueaff'  # Refinement action line
+    # u <word> <n> -> <word> with its n-th char (0-indexed) underlined via ANSI.
+    u() {
+        local w=$1 i=$2
+        printf '%s\e[4m%s\e[24m%s' "${w:0:i}" "${w:i:1}" "${w:i+1}"
+    }
+
+    # filter <bucket> <label> -> reload scoped to a derived bucket; the prompt
+    # keeps the view name and appends the filter, e.g. ' To-do:New> '.
+    flt() { echo "reload($TODO list --reverse --filter $1)+change-prompt( To-do:$2> )"; }
 
     if [[ "$mode" == "refine" ]]; then
         prompt=" Refine> "
-        header=$'REFINE  C-v:view  |  C-t:due today  C-s:due +3d  C-y:someday\nC-e:triage(new)  C-u:uncomplete  C-d:delete  C-x:done'
+        header=" $NG  $(u Back 0) | $(u Completed 0)"$'\n'" $AG_REFINE  $(u Today 0) | $(u Soon 0) | $(u Someday 6) | $(u Delete 1)"
         binds=(
+            "ctrl-b:become(bash $self --ui view)"
+            "ctrl-c:become(bash $self --ui done)"
             "ctrl-t:execute-silent($TODO set-due {1} today)+reload($list)"
             "ctrl-s:execute-silent($TODO set-due {1} +3d)+reload($list)"
             "ctrl-y:execute-silent($TODO set-due {1} clear)+reload($list)"
-            "ctrl-e:execute-silent($TODO triage {1})+reload($list)"
-            "ctrl-u:execute-silent($TODO uncomplete {1})+reload($TODO list --bucket done)"
-            "ctrl-d:execute-silent($TODO delete {1})+reload($list)"
-            "ctrl-x:$(flt done ' Done')"
-            "ctrl-v:become(bash $self --ui view)"
+            "ctrl-e:execute-silent($TODO delete {1})+reload($list)"
+        )
+    elif [[ "$mode" == "done" ]]; then
+        # Completed view: its own session so enter means uncomplete.
+        prompt=" Completed> "
+        header=" $NG  $(u Back 0) | $(u Refinment 0)"
+        list="$TODO list --reverse --filter done"
+        binds=(
+            "enter:execute-silent($TODO uncomplete {1})+reload($list)"
+            "ctrl-b:become(bash $self --ui view)"
+            "ctrl-r:become(bash $self --ui refine)"
         )
     else
         prompt=" To-do> "
-        header=$'VIEW  C-r:refine  |  enter:complete\nC-a:all  C-n:new  C-o:overdue  C-t:today  C-s:soon  C-y:someday  C-x:done'
+        header=" $NG  $(u Refinment 0) | $(u Completed 0)"$'\n'" $AG_VIEW  $(u All 0) | $(u New 0) | $(u Overdue 0) | $(u Today 0) | $(u Soon 0) | $(u Someday 6)"
         binds=(
             "enter:execute-silent($TODO complete {1})+reload($list)"
             "ctrl-r:become(bash $self --ui refine)"
+            "ctrl-c:become(bash $self --ui done)"
             "ctrl-a:reload($list)+change-prompt( To-do> )"
-            "ctrl-n:$(flt new ' New')"
-            "ctrl-o:$(flt overdue ' Overdue')"
-            "ctrl-t:$(flt today ' Today')"
-            "ctrl-s:$(flt soon ' Soon')"
-            "ctrl-y:$(flt someday ' Someday')"
-            "ctrl-x:$(flt done ' Done')"
+            "ctrl-n:$(flt new New)"
+            "ctrl-o:$(flt overdue Overdue)"
+            "ctrl-t:$(flt today Today)"
+            "ctrl-s:$(flt soon Soon)"
+            "ctrl-y:$(flt someday Someday)"
         )
     fi
 
@@ -69,11 +90,27 @@ exec_ui() {
     local b
     for b in "${binds[@]}"; do fzf_args+=(--bind "$b"); done
 
-    "$TODO" list | fzf "${fzf_args[@]}"
+    $list | fzf "${fzf_args[@]}"
 }
 
 # --- entry ----------------------------------------------------------------------------------------
+usage() {
+    cat <<'EOF'
+tool-todo — fzf UI and capture prompt for the `todo` CLI.
+
+Usage:
+  tool-todo            Launch the fzf to-do UI (view/refine/completed modes).
+  tool-todo -i         Open the capture prompt to add a task.
+  tool-todo -h         Show this help.
+
+In the UI, per-mode keybindings are shown in the header. Data lives in the
+`todo` CLI (bin/todo); run `todo -h` for the underlying commands.
+EOF
+}
+
 case "$1" in
+    -h|--help)
+        usage ;;
     -i|--input)
         # capture prompt in a small centered floating terminal
         st -t " Capture Task" -g 60x1 -c float -e "$0" --exec-capture ;;
