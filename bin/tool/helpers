@@ -70,3 +70,24 @@ function format-time() {
     s=$(($1 % 60))
     printf "%02d:%02d:%02d" "$h" "$m" "$s"
 }
+
+# play-sound - Play an audio file with whatever player the system has.
+# Usage: play-sound /path/to/file.wav
+# Tries players in order of preference and returns after the first one that
+# exists. Runs detached in the background so it never blocks the caller, and
+# stays silent if no player is installed rather than erroring out.
+function play-sound() {
+    local file="$1"
+    [ -f "$file" ] || return 1
+
+    local player
+    for player in pw-play paplay aplay ffplay canberra-gtk-play; do
+        command -v "$player" >/dev/null 2>&1 || continue
+        case "$player" in
+            ffplay) ( "$player" -nodisp -autoexit -loglevel quiet "$file" >/dev/null 2>&1 & ) ;;
+            *)      ( "$player" "$file" >/dev/null 2>&1 & ) ;;
+        esac
+        return 0
+    done
+    return 1
+}

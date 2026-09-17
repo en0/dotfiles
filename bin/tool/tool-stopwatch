@@ -2,7 +2,7 @@
 
 ### tool-stopwatch ################################################################################
 # A stopwatch timer.
-# Note, this timer runs slow by 4 seconds over 10 minutes. (2:5)
+# Anchored to the wall clock, so notification latency does not cause drift.
 # Dependencies: dmenu, notify-send.
 ###################################################################################################
 
@@ -15,8 +15,13 @@ SIG_PAUSE="SIGUSR1"
 SIG_LAP="SIGUSR2"
 SIG_STOP="SIGABRT" # since the subprocess has not tty, cant use sigint
 
-# timer variables
+# Timer state. Elapsed time is derived from the wall clock rather than counted,
+# so it can't drift. ACCUMULATED holds seconds banked before the current running
+# segment; SEGMENT_START is the epoch second the current segment began (unused
+# while paused). Running elapsed = ACCUMULATED + (now - SEGMENT_START).
 IS_PAUSED=0
+ACCUMULATED=0
+SEGMENT_START=$(date +%s)
 TIMER_VALUE=0
 LAPS=()
 
@@ -25,16 +30,29 @@ function install-traps() {
     trap mark-lap $SIG_LAP
 }
 
+# elapsed - Print the current elapsed whole seconds, accounting for pauses.
+function elapsed() {
+    if [[ $IS_PAUSED -eq 1 ]]; then
+        echo "$ACCUMULATED"
+    else
+        echo $(( ACCUMULATED + ($(date +%s) - SEGMENT_START) ))
+    fi
+}
+
 function toggle-pause() {
     if [[ $IS_PAUSED -eq 0 ]]; then
+        # Bank the running segment, then stop the clock.
+        ACCUMULATED=$(( ACCUMULATED + ($(date +%s) - SEGMENT_START) ))
         IS_PAUSED=1
     else
+        # Resume: start a fresh segment from now.
+        SEGMENT_START=$(date +%s)
         IS_PAUSED=0
     fi
 }
 
 function mark-lap() {
-    LAPS+=($TIMER_VALUE)
+    LAPS+=($(elapsed))
 }
 
 function show() {
@@ -73,11 +91,17 @@ function launch-tool() {
 }
 
 function exec-tool() {
+    local ms
     install-traps
     while true; do
-        [ $IS_PAUSED -eq 0 ] && ((TIMER_VALUE++))
+        TIMER_VALUE=$(elapsed)
         show
-        sleep 1
+
+        # Sleep to the next whole-second boundary (not a flat 1s) so the
+        # display tracks real seconds regardless of notify-send latency. A
+        # pause/lap signal interrupts the sleep and re-renders immediately.
+        ms=$(( (10#$(date +%N) / 1000000) % 1000 ))
+        sleep "$(printf '0.%03d' $(( 1005 - ms )))" 2>/dev/null || sleep 1
     done
 }
 

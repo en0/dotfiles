@@ -1,8 +1,8 @@
 #!/bin/bash
 
 ### tool-timer ####################################################################################
-# A count-down timer that will display in your notification system and play an alarm once one.
-# Note, this timer runs slow by 4 seconds over 10 minutes. (2:5)
+# A count-down timer that will display in your notification system and play an alarm once done.
+# Anchored to an absolute deadline, so notification latency does not cause drift.
 # Dependencies: notify-send
 ###################################################################################################
 
@@ -10,6 +10,10 @@ source $(dirname $(readlink -e $0))/helpers
 
 NAME="Timer"
 N_TOOL_TIMER=$((N_TOOL_TIMER + (1 + RANDOM % 100000)))
+
+# Bundled alarm sound, shipped in the repo so it works on every machine
+# regardless of what system sound themes are installed.
+ALARM_SOUND="$(dirname $(readlink -e $0))/assets/timer-alarm.wav"
 
 function show() {
     r=$(format-time $1)
@@ -47,14 +51,34 @@ function launch-tool() {
 }
 
 function exec-tool() {
-    local t_label t_seconds
+    local t_label t_seconds deadline now remaining
+
     t_label="$2"
     t_seconds=$(($5 + ($4 * 60) + ($3 * 3600)))
 
-    while [ $t_seconds -gt 0 ]; do
-        ((t_seconds--))
-        show "$t_seconds" "$t_label"
-        sleep 1
+    # Anchor to an absolute deadline so drift can't accumulate: each tick
+    # derives the remaining time from the wall clock rather than assuming
+    # every loop iteration took exactly one second. notify-send latency and
+    # scheduling jitter no longer push the finish time out.
+    deadline=$(( $(date +%s) + t_seconds ))
+
+    while :; do
+        now=$(date +%s)
+        remaining=$(( deadline - now ))
+        (( remaining < 0 )) && remaining=0
+
+        show "$remaining" "$t_label"
+        if (( remaining == 0 )); then
+            play-sound "$ALARM_SOUND"
+            break
+        fi
+
+        # Sleep to the next whole-second boundary (not a flat 1s) so the
+        # displayed value tracks real seconds and never skips or repeats.
+        # Sleep the leftover of the current second, plus a few ms so we wake
+        # just past the boundary instead of landing exactly on it.
+        ms=$(( (10#$(date +%N) / 1000000) % 1000 ))
+        sleep "$(printf '0.%03d' $(( 1005 - ms )))" 2>/dev/null || sleep 1
     done
 }
 
