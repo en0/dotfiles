@@ -47,13 +47,14 @@ exec_ui() {
 
     if [[ "$mode" == "refine" ]]; then
         prompt=" Refine> "
-        header=" $NG  $(u Back 0) | $(u Completed 0)"$'\n'" $AG_REFINE  $(u Today 0) | $(u Soon 0) | $(u Someday 6) | $(u Delete 1)"
+        header=" $NG  $(u Back 0) | $(u Completed 0)"$'\n'" $AG_REFINE  $(u Today 0) | $(u Soon 0) | $(u Someday 6) | $(u New 0) | $(u Delete 1)"
         binds=(
             "ctrl-b:become(bash $self --ui view)"
             "ctrl-c:become(bash $self --ui done)"
             "ctrl-t:execute-silent($TODO set-due {1} today)+reload($list)"
             "ctrl-s:execute-silent($TODO set-due {1} +3d)+reload($list)"
             "ctrl-y:execute-silent($TODO set-due {1} clear)+reload($list)"
+            "ctrl-n:execute-silent($TODO recategorize {1})+reload($list)"
             "ctrl-e:execute-silent($TODO delete {1})+reload($list)"
         )
     elif [[ "$mode" == "done" ]]; then

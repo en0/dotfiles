@@ -390,6 +390,26 @@ def cmd_uncomplete(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_recategorize(args: argparse.Namespace) -> int:
+    """Return a task to NEW (untriaged): clear its due date and completion state.
+
+    The inverse of triage -- an ACTIVE or DONE task drops back to NEW as if just
+    captured, discarding its due date and any completion metadata. A task already
+    in NEW is left alone. What re-triages a NEW item (a person or a cron job) is
+    outside this tool's concern.
+    """
+    with mutating(args.lock_id):
+        src, task = require_task(args.id)
+        if src == NEW:
+            return 0
+        task["due"] = None
+        task.pop("completed", None)
+        task.pop("from", None)
+        remove_from(src, args.id)
+        append_file(NEW, task)
+    return 0
+
+
 def cmd_delete(args: argparse.Namespace) -> int:
     with mutating(args.lock_id):
         src, _ = require_task(args.id)
@@ -548,6 +568,11 @@ def build_parser() -> argparse.ArgumentParser:
         "uncomplete", help="move a completed task back to ACTIVE"))
     uncomplete.add_argument("id")
     uncomplete.set_defaults(func=cmd_uncomplete)
+
+    recat = lockable(sub.add_parser(
+        "recategorize", help="clear a task's date and return it to NEW (untriaged)"))
+    recat.add_argument("id")
+    recat.set_defaults(func=cmd_recategorize)
 
     delete = lockable(sub.add_parser("delete", help="delete a task"))
     delete.add_argument("id")
