@@ -1,0 +1,127 @@
+#!/home/ian/.local/python-venv/bin/python
+"""Move the Idasen desk to a preset with a live dunst progress bar.
+
+Why one process: idasen's `monitor` and `move_to_target` both need the BLE
+connection, but BlueZ allows only one GATT connection to the desk. Running
+`idasen monitor` and `idasen sit` as separate processes deadlocks on that
+single connection slot. Here monitor notifications and the move loop share one
+BleakClient, so the progress bar updates live while the desk travels.
+
+Calling convention: the `tools` dmenu launcher invokes every tool as
+`tool-desk $DETAILS $@`, appending its own dmenu style flags (-fn/-nb/...).
+So argv is not clean: the preset may be absent and trailing flags are noise.
+We scan argv for a known preset word and ignore everything else. With no
+preset (menu launch or flags only) we report the current height, matching the
+old bash tool's behaviour.
+
+Usage: tool-desk [sit|stand|toggle]   (extra dmenu flags are ignored)
+
+`toggle` resolves at runtime: below the sit/stand midpoint it goes to the
+higher preset, at or above it goes to the lower one, so one keybind alternates.
+"""
+
+import asyncio
+import subprocess
+import sys
+
+from idasen import IdasenDesk
+from idasen.cli import load_config
+
+M_TO_IN = 39.37007874
+
+_notify_id = None
+
+
+def notify(summary, body="", progress=None, urgency="low", timeout=None):
+    """Post/replace one dunst notification, reusing its id so it updates in place."""
+    global _notify_id
+    cmd = ["dunstify", "-a", "desk", "-u", urgency]
+    if timeout is not None:
+        cmd += ["-t", str(timeout)]
+    if _notify_id is not None:
+        cmd += ["-r", str(_notify_id)]
+    else:
+        cmd += ["-p"]  # print allocated id on first call
+    if progress is not None:
+        cmd += ["-h", f"int:value:{max(0, min(100, progress))}"]
+    cmd += [summary, body]
+
+    out = subprocess.run(cmd, capture_output=True, text=True)
+    if _notify_id is None:
+        _notify_id = out.stdout.strip() or None
+
+
+def pick_preset(argv, positions):
+    """Return the first argv token that names a known preset or "toggle", else None.
+
+    Ignores dmenu style flags (-fn/-nb/...) and their values that the `tools`
+    launcher forwards. Only a bare known preset word is honoured.
+    """
+    for tok in argv:
+        if tok == "toggle" or tok in positions:
+            return tok
+    return None
+
+
+def resolve_toggle(height, positions):
+    """Map current height to the preset on the far side of the sit/stand midpoint.
+
+    Below the midpoint -> the higher preset; at/above -> the lower one. Needs
+    both 'sit' and 'stand' configured; raises otherwise so the failure is loud.
+    """
+    lo_name = min(positions, key=positions.get)
+    hi_name = max(positions, key=positions.get)
+    midpoint = (positions[lo_name] + positions[hi_name]) / 2
+    return hi_name if height < midpoint else lo_name
+
+
+async def report_height(desk, positions):
+    height = await desk.get_height()
+    notify("Desk", f"{height * M_TO_IN:.2f} in", timeout=2500)
+
+
+async def move(desk, name, target):
+    start = await desk.get_height()
+    span = abs(target - start)
+
+    async def on_update(height, speed):
+        pct = 100 if span < 1e-4 else int(abs(height - start) / span * 100)
+        notify(
+            f"Desk -> {name}",
+            f"{height * M_TO_IN:.2f} in  ({speed:+.3f} m/s)",
+            progress=pct,
+        )
+
+    await desk.monitor(on_update)  # returns immediately; callback runs in bg
+    notify(f"Desk -> {name}", f"{start * M_TO_IN:.2f} in", progress=0)
+    await desk.move_to_target(target)  # blocks until arrival/stall
+
+    final = await desk.get_height()
+    notify(f"Desk at {name}", f"{final * M_TO_IN:.2f} in", progress=100, timeout=2500)
+
+
+async def main():
+    config = load_config()
+    positions = config.get("positions", {})
+    mac = config["mac_address"]
+
+    preset = pick_preset(sys.argv[1:], positions)
+
+    async with IdasenDesk(mac, exit_on_fail=True) as desk:
+        if preset is None:
+            await report_height(desk, positions)
+        else:
+            if preset == "toggle":
+                preset = resolve_toggle(await desk.get_height(), positions)
+            await move(desk, preset, positions[preset])
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(asyncio.run(main()))
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        pass
+    except Exception as e:  # keybind/menu must never leave a silent failure
+        notify("Desk: failed", str(e), urgency="critical", timeout=4000)
+        sys.exit(1)
