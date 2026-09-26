@@ -7,13 +7,19 @@
 
 set -uo pipefail
 
+# Cron/systemd start with a minimal PATH; add the usual bin dirs so kiro-cli
+# resolves wherever it is installed on this host (system or user-local).
+export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+
 TODO="$HOME/.bin/todo"
 
 # Nothing captured since last run -> exit before spending a model call.
 [[ -z "$("$TODO" list --filter new -q)" ]] && exit 0
 
-exec /home/ian/.local/bin/kiro-cli chat \
+# No --trust-all-tools on purpose: that would override the agent's
+# allowedCommands allowlist. Instead the agent auto-approves only the exact
+# todo commands in its config; anything else fails closed in headless mode.
+exec kiro-cli chat \
   --agent todo-categorizer \
   --no-interactive \
-  --trust-all-tools \
   "Categorize new todo items now."
