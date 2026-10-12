@@ -15,6 +15,18 @@ exec_capture() {
     [[ -n "$task" ]] && "$TODO" add "$task"
 }
 
+# --- edit: inline prompt in the current terminal, shows current text, then re-enters refine ------
+exec_edit() {
+    local id="$1"
+    local current
+    current=$("$TODO" list -q | awk -F'|' -v id="$id" '$1 == id { print $3 }')
+    echo " Current: $current"
+    local text
+    read -r -p " Edit:    " text
+    [[ -n "$text" ]] && "$TODO" edit "$id" "$text"
+    exec_ui refine
+}
+
 # --- fzf UI: two modes (view/refine) toggled in-session via become() ------------------------------
 # fzf has no real modes; a toggle key relaunches this script in the other mode, swapping the whole
 # keymap and header. Every mutation shells out to a `todo` subcommand then reloads from `todo list`.
@@ -47,7 +59,7 @@ exec_ui() {
 
     if [[ "$mode" == "refine" ]]; then
         prompt=" Refine> "
-        header=" $NG  $(u Back 0) | $(u Completed 0)"$'\n'" $AG_REFINE  $(u Today 0) | $(u Soon 0) | $(u Someday 6) | $(u New 0) | $(u Delete 1)"
+        header=" $NG  $(u Back 0) | $(u Completed 0)"$'\n'" $AG_REFINE  $(u Today 0) | $(u Soon 0) | $(u Someday 6) | $(u New 0) | $(u Edit 0) | $(u Delete 0)"
         binds=(
             "ctrl-b:become(bash $self --ui view)"
             "ctrl-c:become(bash $self --ui done)"
@@ -55,7 +67,8 @@ exec_ui() {
             "ctrl-s:execute-silent($TODO set-due {1} +3d)+reload($list)"
             "ctrl-y:execute-silent($TODO set-due {1} clear)+reload($list)"
             "ctrl-n:execute-silent($TODO recategorize {1})+reload($list)"
-            "ctrl-e:execute-silent($TODO delete {1})+reload($list)"
+            "ctrl-e:become(bash $self --exec-edit {1})"
+            "ctrl-d:execute-silent($TODO delete {1})+reload($list)"
         )
     elif [[ "$mode" == "done" ]]; then
         # Completed view: its own session so enter means uncomplete.
@@ -117,6 +130,8 @@ case "$1" in
         st -t " Capture Task" -g 60x1 -c float -e "$0" --exec-capture ;;
     --exec-capture)
         exec_capture ;;
+    --exec-edit)
+        exec_edit "$2" ;;
     --ui)
         # relaunch target (from become) - runs fzf directly in the current terminal
         exec_ui "$2" ;;

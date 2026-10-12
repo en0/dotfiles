@@ -410,6 +410,23 @@ def cmd_recategorize(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_edit(args: argparse.Namespace) -> int:
+    """Replace a task's text. Bucket, due date, and all other fields are unchanged."""
+    text = args.text.strip()
+    if not text:
+        print("empty text, nothing changed", file=sys.stderr)
+        return 1
+    with mutating(args.lock_id):
+        src, task = require_task(args.id)
+        if src == DONE:
+            print("cannot edit a completed task; uncomplete it first",
+                  file=sys.stderr)
+            return 1
+        task["text"] = text
+        replace_in(src, task)
+    return 0
+
+
 def cmd_delete(args: argparse.Namespace) -> int:
     with mutating(args.lock_id):
         src, _ = require_task(args.id)
@@ -573,6 +590,11 @@ def build_parser() -> argparse.ArgumentParser:
         "recategorize", help="clear a task's date and return it to NEW (untriaged)"))
     recat.add_argument("id")
     recat.set_defaults(func=cmd_recategorize)
+
+    edit = lockable(sub.add_parser("edit", help="update a task's text"))
+    edit.add_argument("id")
+    edit.add_argument("text")
+    edit.set_defaults(func=cmd_edit)
 
     delete = lockable(sub.add_parser("delete", help="delete a task"))
     delete.add_argument("id")
