@@ -13,7 +13,7 @@ N_TOOL_TIMER=$((N_TOOL_TIMER + (1 + RANDOM % 100000)))
 
 # Bundled alarm sound, shipped in the repo so it works on every machine
 # regardless of what system sound themes are installed.
-ALARM_SOUND="$(dirname $(readlink -e $0))/assets/timer-alarm.wav"
+ALARM_SOUND="$(dirname $(readlink -e $0))/../../assets/timer-alarm.wav"
 
 function show() {
     r=$(format-time $1)
