@@ -1,0 +1,15 @@
+! dmenu
+dmenu.font:          JetBrainsMonoNerdFont:size=13
+dmenu.background:    #1c1c1c
+dmenu.foreground:    #836f3f
+dmenu.backgroundSel: #333333
+dmenu.foregroundSel: #fbc850
+
+! i3wm
+i3wm.font:                pango:JetBrainsMonoNerdFont 10
+i3wm.color.cakepop_sorbet: #fbc850
+i3wm.color.cakepop_gold:   #c9961e
+i3wm.color.coco_black:     #1c1c1c
+i3wm.color.dark_charcoal:  #333333
+i3wm.color.mossy:          #836f3f
+i3wm.color.urgent:         #836f3f

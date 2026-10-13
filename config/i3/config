@@ -1,7 +1,6 @@
 set $mod Mod4
 
-set $pango_font         pango:JetBrainsMonoNerdFont 10
-set $font               JetBrainsMonoNerdFont:size=13
+set_from_resource $pango_font      i3wm.font        pango:JetBrainsMonoNerdFont 10
 
 set $workspace01        "1:1"
 set $workspace02        "2:2"
@@ -14,12 +13,12 @@ set $workspace08        "8:8"
 set $workspace09        "9:9"
 set $workspace10        "10:10"
 
-set $col_cakepop_sorbet #fbc850
-set $col_cakepop_gold   #c9961e
-set $col_coco_black     #1c1c1c
-set $col_dark_charcoal  #333333
-set $col_mossy          #836f3f
-set $col_urgent         #836f3f
+set_from_resource $col_cakepop_sorbet i3wm.color.cakepop_sorbet #fbc850
+set_from_resource $col_cakepop_gold   i3wm.color.cakepop_gold   #c9961e
+set_from_resource $col_coco_black     i3wm.color.coco_black     #1c1c1c
+set_from_resource $col_dark_charcoal  i3wm.color.dark_charcoal  #333333
+set_from_resource $col_mossy          i3wm.color.mossy          #836f3f
+set_from_resource $col_urgent         i3wm.color.urgent         #836f3f
 
 include ~/.config/i3/ini.d/host_`hostname`.ini
 include ~/.config/i3/ini.d/layouts.ini
