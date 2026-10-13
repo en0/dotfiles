@@ -6,10 +6,31 @@ dmenu.backgroundSel: #333333
 dmenu.foregroundSel: #fbc850
 
 ! i3wm
-i3wm.font:                pango:JetBrainsMonoNerdFont 10
+i3wm.font:                 pango:JetBrainsMonoNerdFont 10
 i3wm.color.cakepop_sorbet: #fbc850
 i3wm.color.cakepop_gold:   #c9961e
 i3wm.color.coco_black:     #1c1c1c
 i3wm.color.dark_charcoal:  #333333
 i3wm.color.mossy:          #836f3f
 i3wm.color.urgent:         #836f3f
+
+! st
+st.font:         JetBrainsMonoNerdFont:pixelsize=15:antialias=true:autohint=true
+st.background:   #1C1C1C
+st.foreground:   #C0B18B
+st.color0:       #4A3637
+st.color1:       #D17B49
+st.color2:       #7B8748
+st.color3:       #AF865A
+st.color4:       #535C5C
+st.color5:       #775759
+st.color6:       #6D715E
+st.color7:       #C0B18B
+st.color8:       #402E2E
+st.color9:       #AC5D2F
+st.color10:      #647035
+st.color11:      #8F6840
+st.color12:      #444B4B
+st.color13:      #614445
+st.color14:      #585C49
+st.color15:      #978965
