@@ -1,0 +1,88 @@
+#!/bin/bash
+### gen-desktop-files #############################################################################
+# Generate ~/.local/share/applications/tool-*.desktop files for every script
+# in ~/.bin/tool/tool-*. Idempotent — safe to re-run after adding new tools.
+#
+# Desktop files are written to $DEST_DIR (default ~/.local/share/applications).
+# The generator derives a human-readable name by stripping the "tool-" prefix,
+# replacing underscores with spaces, and title-casing the result. The display
+# name is prefixed with "Tool: " so the entries group visually in dmenu.
+#
+# Usage: gen-desktop-files [--dry-run]
+###################################################################################################
+
+set -euo pipefail
+
+TOOL_DIR="${HOME}/.bin/tool"
+DEST_DIR="${HOME}/.local/share/applications"
+DRY_RUN=false
+
+[[ "${1:-}" == "--dry-run" ]] && DRY_RUN=true
+
+mkdir -p "$DEST_DIR"
+
+# Words that should be fully uppercased (or otherwise special-cased) in display names.
+declare -A ACRONYMS=(
+    [pp]="PP"
+    [mc]="MC"
+    [uuid]="UUID"
+    [ip]="IP"
+    [json]="JSON"
+    [base64]="Base64"
+)
+
+# title_case <string>  — "base64_decode" -> "Base64 Decode", "json_pp" -> "JSON PP"
+title_case() {
+    local input="$1"
+    local result=""
+    # Split on underscores, title-case each word, then apply acronym overrides
+    IFS='_' read -ra parts <<< "$input"
+    for word in "${parts[@]}"; do
+        lower=$(echo "$word" | tr '[:upper:]' '[:lower:]')
+        if [[ -n "${ACRONYMS[$lower]+x}" ]]; then
+            result+="${ACRONYMS[$lower]} "
+        else
+            # title-case: uppercase first letter
+            result+="$(echo "${word:0:1}" | tr '[:lower:]' '[:upper:]')${word:1} "
+        fi
+    done
+    echo "${result% }"
+}
+
+generated=0
+skipped=0
+
+for script in "$TOOL_DIR"/tool-*; do
+    [[ -x "$script" ]] || continue
+
+    base=$(basename "$script")                    # tool-clipboard_history
+    short="${base#tool-}"                         # clipboard_history
+    label=$(title_case "$short")                  # Clipboard History
+    display_name="Tool:${label}"
+    desktop_file="${DEST_DIR}/${base}.desktop"
+
+    content="[Desktop Entry]
+Version=1.0
+Type=Application
+Name=${display_name}
+Exec=${script}
+Terminal=false
+Categories=Utility;
+NoDisplay=false
+"
+
+    if $DRY_RUN; then
+        echo "--- ${desktop_file} ---"
+        echo "$content"
+        skipped=$((skipped + 1))
+    else
+        printf '%s' "$content" > "$desktop_file"
+        generated=$((generated + 1))
+    fi
+done
+
+if $DRY_RUN; then
+    echo "Dry run: would generate ${skipped} desktop file(s) in ${DEST_DIR}"
+else
+    echo "Generated ${generated} desktop file(s) in ${DEST_DIR}"
+fi
