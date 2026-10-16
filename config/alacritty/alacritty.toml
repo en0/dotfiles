@@ -1,13 +1,16 @@
+[terminal.shell]
+program = "/usr/bin/tmux"
+
 [window]
 padding.x = 3
 padding.y = 3
-decorations = "Buttonless"
-opacity = 0.8
-blur = true
+#decorations = "Buttonless"
+#opacity = 0.8
+#blur = true
 
 [font]
 normal.family = "JetBrainsMono Nerd Font"
-size = 10
+size = 15
 
 [keyboard]
 bindings = [

@@ -5,7 +5,7 @@ import os
 import os.path
 import pathlib
 from argparse import ArgumentParser
-from typing import Callable, NamedTuple
+from typing import Callable, NamedTuple, Protocol
 
 
 DOTFILES_ROOT = pathlib.Path(os.path.dirname(__file__))
@@ -24,9 +24,18 @@ class Opts(NamedTuple):
     filter: PathFilter
 
 
+class IPathFilter(Protocol):
+    def check(self, target: str): ...
+
+
+class NullPathFilter:
+    def check(self, target: str):
+        return True
+
+
 class PathFilter:
 
-    def __init__(self, value: str):
+    def __init__(self, value: str | None):
         value = pathlib.Path(os.path.expanduser(value)).resolve()
         self.raw = str(value)
         if self.raw.endswith(os.path.sep):
@@ -45,6 +54,7 @@ class PathFilter:
 
     def __repr__(self):
         return f'<PathFilter(raw="{self.raw}",path="{self.path}")>'
+
 
 def get_opts() -> Opts:
     ap = ArgumentParser()
@@ -70,7 +80,7 @@ def get_opts() -> Opts:
     return Opts(
         cleanup=opts.d,
         dry_run=opts.n,
-        filter=opts.f
+        filter=opts.f if opts.f else NullPathFilter()
     )
 
 
@@ -86,7 +96,7 @@ def maybe_do(
         cmd()
 
 
-def install_files(dry_run: bool, filt: PathFilter):
+def install_files(dry_run: bool, filt: IPathFilter):
     for source, target in DIRS.items():
 
         if not target.exists() and filt.check(target):
@@ -114,7 +124,7 @@ def install_files(dry_run: bool, filt: PathFilter):
                         print("WARNING!", "Refusing to overwrite", p/f)
 
 
-def cleanup_dead_files(dry_run: bool, filt: PathFilter):
+def cleanup_dead_files(dry_run: bool, filt: IPathFilter):
     for _, target in DIRS.items():
         for root, _, files in os.walk(target):
             for f in files:

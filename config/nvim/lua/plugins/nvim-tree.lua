@@ -23,7 +23,7 @@ return {
             hijack_cursor = false,
             update_cwd = false,
 
-            view = {width = 50, side = "left"},
+            view = {width = 30, side = "left"},
 
             diagnostics = {
                 enable = true,
