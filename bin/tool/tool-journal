@@ -104,9 +104,11 @@ function update-tags() {
 
     local tags
 
+    # Scan the whole file, including the Tags header line, so tags typed
+    # directly into the header are preserved and merged with any inline
+    # body tags. The "**Tags**" label has no '#', so it is not matched.
     tags=$( \
-        grep -v '^- \*\*Tags\*\*:' "$file" | \
-        rg -o '#[A-Za-z0-9_-]+' | \
+        rg -o '#[A-Za-z0-9_-]+' "$file" | \
         tr '[:upper:]' '[:lower:]' | \
         sort -u | \
         tr '\n' ' '
