@@ -16,6 +16,7 @@ i3wm.color.urgent:         #836f3f
 
 ! st
 st.font:         JetBrainsMonoNerdFont:pixelsize=15:antialias=true:autohint=true
+st.borderpx:     10
 st.background:   #1C1C1C
 st.foreground:   #C0B18B
 st.color0:       #4A3637
