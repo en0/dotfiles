@@ -18,12 +18,6 @@ DIRS = {
 }
 
 
-class Opts(NamedTuple):
-    cleanup: bool
-    dry_run: bool
-    filter: PathFilter
-
-
 class IPathFilter(Protocol):
     def check(self, target: str): ...
 
@@ -54,6 +48,12 @@ class PathFilter:
 
     def __repr__(self):
         return f'<PathFilter(raw="{self.raw}",path="{self.path}")>'
+
+
+class Opts(NamedTuple):
+    cleanup: bool
+    dry_run: bool
+    filter: PathFilter
 
 
 def get_opts() -> Opts:

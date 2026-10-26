@@ -22,4 +22,5 @@ TODO="$HOME/.bin/todo"
 exec kiro-cli chat \
   --agent todo-categorizer \
   --no-interactive \
+  --trust-all-tools \
   "Categorize new todo items now."
